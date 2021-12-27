@@ -565,6 +565,11 @@ main(int argc, char **argv)
 				set_zoom(atoi(argv[++i]));
 			else
 				return error("Opt", "-s No scale provided.");
+		} else if(strcmp(argv[i], "-cd") == 0) {
+			if(i < argc - 1)
+				chdir(argv[++i]);
+			else
+				return error("Opt", "-cd No path provided.");
 		} else if(!loaded++) {
 			if(!start(&u, argv[i]))
 				return error("Boot", "Failed to boot.");

@@ -1698,7 +1698,11 @@ class SDLMain implements Runnable {
         // Runs SDL_main()
         String library = SDLActivity.mSingleton.getMainSharedObject();
         String function = SDLActivity.mSingleton.getMainFunction();
-        String[] arguments = SDLActivity.mSingleton.getArguments();
+        String[] a = SDLActivity.mSingleton.getArguments();
+        String[] args = new String[a.length + 2];
+        System.arraycopy(a, 0, args, 0, a.length);
+        args[a.length + 0] = "-cd";
+        args[a.length + 1] = SDLActivity.mSingleton.getCacheDir().getPath();
 
         try {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY);
@@ -1708,7 +1712,7 @@ class SDLMain implements Runnable {
 
         Log.v(SDLActivity.TAG, "Running main function " + function + " from library " + library);
 
-        SDLActivity.nativeRunMain(library, function, arguments);
+        SDLActivity.nativeRunMain(library, function, args);
 
         Log.v(SDLActivity.TAG, "Finished main function");
 

@@ -1,3 +1,4 @@
+#ifdef __aarch64__
 #include <arm_neon.h>
 #include "ppu.h"
 
@@ -29,3 +30,4 @@ ppu_redraw(Ppu *p, Uint32 *screen)
 	for(; i < p->width * p->height; i++)
 		screen[i] = p->palette[*fg ? *fg : *bg];
 }
+#endif

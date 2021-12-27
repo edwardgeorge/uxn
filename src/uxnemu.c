@@ -443,6 +443,27 @@ console_input(Uxn *u, char c)
 }
 
 static int
+mouse_steal(SDL_Event *event)
+{
+#ifdef __ANDROID__
+	int x = event->motion.x - PAD, y = event->motion.y - PAD;
+
+	if(x < 0 || x > ppu.width || y < 0 || y > ppu.height) {
+		if(event->type == SDL_MOUSEBUTTONDOWN) {
+			if(SDL_IsTextInputActive())
+				SDL_StopTextInput();
+			else
+				SDL_StartTextInput();
+		}
+		return 1;
+	}
+#else
+	(void)event;
+#endif
+	return 0;
+}
+
+static int
 run(Uxn *u)
 {
 	redraw(u);
@@ -466,13 +487,13 @@ run(Uxn *u)
 			else if(event.type >= audio0_event && event.type < audio0_event + POLYPHONY)
 				uxn_eval(u, peek16((devaudio0 + (event.type - audio0_event))->dat, 0));
 			/* Mouse */
-			else if(event.type == SDL_MOUSEMOTION)
+			else if(event.type == SDL_MOUSEMOTION && !mouse_steal(&event))
 				mouse_pos(devmouse,
 					clamp(event.motion.x - PAD, 0, uxn_screen.width - 1),
 					clamp(event.motion.y - PAD, 0, uxn_screen.height - 1));
 			else if(event.type == SDL_MOUSEBUTTONUP)
 				mouse_up(devmouse, SDL_BUTTON(event.button.button));
-			else if(event.type == SDL_MOUSEBUTTONDOWN)
+			else if(event.type == SDL_MOUSEBUTTONDOWN && !mouse_steal(&event))
 				mouse_down(devmouse, SDL_BUTTON(event.button.button));
 			else if(event.type == SDL_MOUSEWHEEL)
 				mouse_scroll(devmouse, event.wheel.x, event.wheel.y);

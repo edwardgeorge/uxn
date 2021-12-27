@@ -101,7 +101,7 @@ set_window_size(SDL_Window *window, int w, int h)
 	SDL_SetWindowSize(window, w, h);
 }
 
-int
+static int
 set_size(Uint16 width, Uint16 height, int is_resize)
 {
 	screen_resize(&uxn_screen, width, height);
@@ -137,6 +137,7 @@ redraw(Uxn *u)
 static int
 init(void)
 {
+	int winflags;
 	SDL_AudioSpec as;
 	SDL_zero(as);
 	as.freq = SAMPLE_FREQUENCY;
@@ -154,7 +155,13 @@ init(void)
 		if(!audio_id)
 			error("sdl_audio", SDL_GetError());
 	}
-	gWindow = SDL_CreateWindow("Uxn", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, (WIDTH + PAD * 2) * zoom, (HEIGHT + PAD * 2) * zoom, SDL_WINDOW_SHOWN);
+#ifdef __ANDROID__
+	winflags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_BORDERLESS | SDL_WINDOW_INPUT_GRABBED;
+	SDL_SetHint(SDL_HINT_ORIENTATIONS, "Portrait LandscapeLeft LandscapeRight");
+#else
+	winflagfs = 0;
+#endif
+	gWindow = SDL_CreateWindow("Uxn", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, (WIDTH + PAD * 2) * zoom, (HEIGHT + PAD * 2) * zoom, winflags);
 	if(gWindow == NULL)
 		return error("sdl_window", SDL_GetError());
 	gRenderer = SDL_CreateRenderer(gWindow, -1, 0);
@@ -323,8 +330,13 @@ start(Uxn *u, char *rom)
 static void
 set_zoom(Uint8 scale)
 {
+{
+#ifdef __ANDROID__
+	(void)scale;
+#else
 	zoom = clamp(scale, 1, 3);
 	set_window_size(gWindow, (uxn_screen.width + PAD * 2) * zoom, (uxn_screen.height + PAD * 2) * zoom);
+#endif
 }
 
 static void

@@ -479,18 +479,26 @@ run(Uxn *u)
 	while(!devsystem->dat[0xf]) {
 		SDL_Event event;
 		double elapsed, begin;
+		int force_redraw = 0;
 		if(!BENCH)
 			begin = SDL_GetPerformanceCounter();
 		while(SDL_PollEvent(&event) != 0) {
 			/* Window */
 			if(event.type == SDL_QUIT)
 				return error("Run", "Quit.");
-			else if(event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_EXPOSED)
-				redraw(u);
-			else if(event.type == SDL_DROPFILE) {
-				set_size(WIDTH, HEIGHT, 0);
+			else if(event.type == SDL_WINDOWEVENT) {
+				if(event.window.event == SDL_WINDOWEVENT_RESIZED || event.window.event == SDL_WINDOWEVENT_EXPOSED) {
+#ifdef __ANDROID__
+					/* rotation does something weird, have to redraw twice */
+					if(event.window.event == SDL_WINDOWEVENT_RESIZED)
+						redraw();
+#endif
+					force_redraw = 1;
+				}
+			} else if(event.type == SDL_DROPFILE) {
 				start(u, event.drop.file);
 				SDL_free(event.drop.file);
+				force_redraw = 1;
 			}
 			/* Audio */
 			else if(event.type >= audio0_event && event.type < audio0_event + POLYPHONY)
@@ -533,7 +541,7 @@ run(Uxn *u)
 				console_input(u, event.cbutton.button);
 		}
 		uxn_eval(u, devscreen->vector);
-		if(uxn_screen.fg.changed || uxn_screen.bg.changed || devsystem->dat[0xe])
+		if(uxn_screen.fg.changed || uxn_screen.bg.changed || devsystem->dat[0xe] || force_redraw)
 			redraw(u);
 		if(!BENCH) {
 			elapsed = (SDL_GetPerformanceCounter() - begin) / (double)SDL_GetPerformanceFrequency() * 1000.0f;

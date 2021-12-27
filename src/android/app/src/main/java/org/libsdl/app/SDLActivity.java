@@ -13,6 +13,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
@@ -27,6 +28,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.provider.OpenableColumns;
 import android.text.InputType;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -326,8 +328,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
 
     @Override
     protected void onNewIntent(Intent intent) {
-        Log.v(TAG, "got intent " + intent);
-
         Uri uri = intent.getData();
         if (uri == null)
             return;
@@ -341,7 +341,16 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
                 int size = data.read(raw, 0, 65536);
                 data.close();
 
-                filename = this.getCacheDir().getPath() + "/" + "external.rom";
+                Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+                if (cursor != null) {
+                    int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    cursor.moveToFirst();
+                    filename = cursor.getString(index);
+                } else {
+                    filename = "external.rom";
+                }
+
+                filename = this.getCacheDir().getPath() + "/" + filename;
                 FileOutputStream out = new FileOutputStream(filename, false);
                 out.write(raw, 0, size);
                 out.close();
@@ -2350,4 +2359,3 @@ class SDLClipboardHandler implements
         SDLActivity.onNativeClipboardChanged();
     }
 }
-

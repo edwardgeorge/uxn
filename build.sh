@@ -30,7 +30,7 @@ then
 fi
 
 mkdir -p bin
-CC="${CC:-cc}"
+CC="${CC:-clang}"
 CFLAGS="${CFLAGS:--std=c89 -Wall -Wno-unknown-pragmas}"
 case "$(uname -s 2>/dev/null)" in
 MSYS_NT*|MINGW*) # MSYS2 on Windows

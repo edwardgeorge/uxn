@@ -166,7 +166,6 @@ init(void)
 	}
 #ifdef __ANDROID__
 	winflags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_BORDERLESS | SDL_WINDOW_INPUT_GRABBED;
-	SDL_SetHint(SDL_HINT_ORIENTATIONS, "Portrait LandscapeLeft LandscapeRight");
 #else
 	winflagfs = 0;
 #endif

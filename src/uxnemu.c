@@ -167,7 +167,7 @@ init(void)
 #ifdef __ANDROID__
 	winflags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_BORDERLESS | SDL_WINDOW_INPUT_GRABBED;
 #else
-	winflagfs = 0;
+	winflags = 0;
 #endif
 	gWindow = SDL_CreateWindow("Uxn", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, (WIDTH + PAD * 2) * zoom, (HEIGHT + PAD * 2) * zoom, winflags);
 	if(gWindow == NULL)

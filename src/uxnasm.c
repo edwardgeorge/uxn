@@ -236,15 +236,23 @@ doinclude(const char *filename)
 static int
 parse(char *w, FILE *f)
 {
-	int i = 0;
+	int i;
 	char word[64], subw[64], c;
 	Macro *m;
 	if(slen(w) >= 63)
 		return error("Invalid token", w);
 	switch(w[0]) {
 	case '(': /* comment */
-		while(fscanf(f, "%63s", word) == 1)
-			if(word[0] == ')') break;
+		if(slen(w) != 1) fprintf(stderr, "-- Malformed comment: %s\n", w);
+		i = 1; /* track nested comment depth */
+		while(fscanf(f, "%63s", word) == 1) {
+			if(slen(word) != 1)
+				continue;
+			else if(word[0] == '(')
+				i++;
+			else if(word[0] == ')' && --i < 1)
+				break;
+		}
 		break;
 	case '~': /* include */
 		if(!doinclude(w + 1))

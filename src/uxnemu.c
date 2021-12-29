@@ -155,6 +155,7 @@ init(void)
 	as.callback = audio_callback;
 	as.samples = 512;
 	as.userdata = NULL;
+	SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0");
 	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0)
 		return error("sdl", SDL_GetError());
 #ifdef __ANDROID__

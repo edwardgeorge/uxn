@@ -155,15 +155,8 @@ init(void)
 	as.callback = audio_callback;
 	as.samples = 512;
 	as.userdata = NULL;
-	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0) {
-		error("sdl", SDL_GetError());
-		if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0)
-			return error("sdl", SDL_GetError());
-	} else {
-		audio_id = SDL_OpenAudioDevice(NULL, 0, &as, NULL, 0);
-		if(!audio_id)
-			error("sdl_audio", SDL_GetError());
-	}
+	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0)
+		return error("sdl", SDL_GetError());
 #ifdef __ANDROID__
 	winflags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_BORDERLESS | SDL_WINDOW_INPUT_GRABBED;
 #else
@@ -186,7 +179,6 @@ init(void)
 	SDL_StartTextInput();
 	SDL_ShowCursor(SDL_DISABLE);
 	SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
-	SDL_GameControllerEventState(SDL_ENABLE);
 	return 1;
 }
 

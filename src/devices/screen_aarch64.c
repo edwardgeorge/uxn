@@ -1,9 +1,10 @@
 #ifdef __aarch64__
 #include <arm_neon.h>
-#include "ppu.h"
+#include "../uxn.h"
+#include "screen.h"
 
 void
-ppu_redraw(Ppu *p, Uint32 *screen)
+screen_redraw(UxnScreen *p, Uint32 *screen)
 {
 	uint8x16x4_t pal = vld4q_u8((Uint8*)p->palette);
 	Uint8 *fg = p->fg.pixels;

@@ -110,7 +110,7 @@ set_window_size(SDL_Window *window, int w, int h)
 	SDL_SetWindowSize(window, w, h);
 }
 
-static int
+int
 set_size(Uint16 width, Uint16 height, int is_resize)
 {
 	screen_resize(&uxn_screen, width, height);
@@ -338,7 +338,6 @@ start(Uxn *u, char *rom)
 static void
 set_zoom(Uint8 scale)
 {
-{
 #ifdef __ANDROID__
 	(void)scale;
 #else
@@ -456,7 +455,7 @@ mouse_steal(SDL_Event *event)
 #ifdef __ANDROID__
 	int x = event->motion.x - PAD, y = event->motion.y - PAD;
 
-	if(x < 0 || x > ppu.width || y < 0 || y > ppu.height) {
+	if(x < 0 || x > uxn_screen.width || y < 0 || y > uxn_screen.height) {
 		if(event->type == SDL_MOUSEBUTTONDOWN) {
 			if(SDL_IsTextInputActive())
 				SDL_StopTextInput();
@@ -490,7 +489,7 @@ run(Uxn *u)
 #ifdef __ANDROID__
 					/* rotation does something weird, have to redraw twice */
 					if(event.window.event == SDL_WINDOWEVENT_RESIZED)
-						redraw();
+						redraw(u);
 #endif
 					force_redraw = 1;
 				}

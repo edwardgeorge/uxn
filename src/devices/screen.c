@@ -114,7 +114,7 @@ screen_clear(UxnScreen *p, Layer *layer)
 	layer->changed = 1;
 }
 
-#pragma weak ppu_redraw
+#pragma weak screen_redraw
 void
 screen_redraw(UxnScreen *p, Uint32 *pixels)
 {

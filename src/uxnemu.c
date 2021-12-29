@@ -322,6 +322,9 @@ start(Uxn *u, char *rom)
 	/* unused   */ uxn_port(u, 0xe, nil_dei, nil_deo);
 	/* unused   */ uxn_port(u, 0xf, nil_dei, nil_deo);
 
+	screen_clear(&uxn_screen, &uxn_screen.fg);
+	screen_clear(&uxn_screen, &uxn_screen.bg);
+
 	if(!uxn_eval(u, PAGE_PROGRAM))
 		return error("Boot", "Failed to start rom.");
 

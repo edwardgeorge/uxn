@@ -2,3 +2,5 @@
 app/build
 local.properties
 .idea
+app/debug
+app/release

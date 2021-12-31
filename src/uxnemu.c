@@ -38,7 +38,11 @@ WITH REGARD TO THIS SOFTWARE.
 
 #define WIDTH 64 * 8
 #define HEIGHT 40 * 8
+#ifdef __ANDROID__
+#define PAD 0
+#else
 #define PAD 4
+#endif
 #define BENCH 0
 
 static SDL_Window *gWindow;
@@ -46,6 +50,8 @@ static SDL_Texture *gTexture;
 static SDL_Renderer *gRenderer;
 static SDL_AudioDeviceID audio_id;
 static SDL_Rect gRect;
+static SDL_Point gScrSize;
+static SDL_Rect gScrDst;
 
 /* devices */
 
@@ -110,6 +116,19 @@ set_window_size(SDL_Window *window, int w, int h)
 	SDL_SetWindowSize(window, w, h);
 }
 
+static void
+resized(void)
+{
+#ifdef __ANDROID__
+	/* on Android we want to move the screen to the top when in portrait mode */
+	SDL_GetWindowSize(gWindow, &gScrSize.x, &gScrSize.y);
+#else
+	gScrSize.x = uxn_screen.width + PAD * 2;
+	gScrSize.y = uxn_screen.height + PAD * 2;
+#endif
+	SDL_RenderSetLogicalSize(gRenderer, gScrSize.x, gScrSize.y);
+}
+
 int
 set_size(Uint16 width, Uint16 height, int is_resize)
 {
@@ -119,7 +138,7 @@ set_size(Uint16 width, Uint16 height, int is_resize)
 	gRect.w = uxn_screen.width;
 	gRect.h = uxn_screen.height;
 	if(gTexture != NULL) SDL_DestroyTexture(gTexture);
-	SDL_RenderSetLogicalSize(gRenderer, uxn_screen.width + PAD * 2, uxn_screen.height + PAD * 2);
+	resized();
 	gTexture = SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, uxn_screen.width + PAD * 2, uxn_screen.height + PAD * 2);
 	if(gTexture == NULL || SDL_SetTextureBlendMode(gTexture, SDL_BLENDMODE_NONE))
 		return error("gTexture", SDL_GetError());
@@ -139,7 +158,22 @@ redraw(Uxn *u)
 	if(SDL_UpdateTexture(gTexture, &gRect, uxn_screen.pixels, uxn_screen.width * sizeof(Uint32)) != 0)
 		error("SDL_UpdateTexture", SDL_GetError());
 	SDL_RenderClear(gRenderer);
-	SDL_RenderCopy(gRenderer, gTexture, NULL, NULL);
+	gScrDst.x = 0;
+	gScrDst.y = 0;
+#ifdef __ANDROID__
+	if(gScrSize.y > gScrSize.x) { /* portrait */
+		gScrDst.w = gScrSize.x;
+		gScrDst.h = gScrSize.x * uxn_screen.height / uxn_screen.width;
+	} else { /* landscape */
+		gScrDst.h = gScrSize.y;
+		gScrDst.w = gScrSize.y * uxn_screen.width / uxn_screen.height;
+		gScrDst.x = (gScrSize.x - gScrDst.w) / 2;
+	}
+#else
+	gScrDst.w = gScrSize.x;
+	gScrDst.h = gScrSize.y;
+#endif
+	SDL_RenderCopy(gRenderer, gTexture, NULL, &gScrDst);
 	SDL_RenderPresent(gRenderer);
 }
 
@@ -449,7 +483,13 @@ static int
 mouse_steal(SDL_Event *event)
 {
 #ifdef __ANDROID__
-	int x = event->motion.x - PAD, y = event->motion.y - PAD;
+	int x, y;
+
+	event->motion.x = (event->motion.x - gScrDst.x) * (uxn_screen.width + PAD * 2) / gScrDst.w;
+	event->motion.y = (event->motion.y - gScrDst.y) * (uxn_screen.height + PAD * 2) / gScrDst.h;
+
+	x = event->motion.x - PAD;
+	y = event->motion.y - PAD;
 
 	if(x < 0 || x > uxn_screen.width || y < 0 || y > uxn_screen.height) {
 		if(event->type == SDL_MOUSEBUTTONDOWN) {
@@ -458,7 +498,7 @@ mouse_steal(SDL_Event *event)
 			else
 				SDL_StartTextInput();
 		}
-		return 1;
+		return event->type != SDL_MOUSEBUTTONUP;
 	}
 #else
 	(void)event;
@@ -484,8 +524,10 @@ run(Uxn *u)
 				if(event.window.event == SDL_WINDOWEVENT_RESIZED || event.window.event == SDL_WINDOWEVENT_EXPOSED) {
 #ifdef __ANDROID__
 					/* rotation does something weird, have to redraw twice */
-					if(event.window.event == SDL_WINDOWEVENT_RESIZED)
+					if(event.window.event == SDL_WINDOWEVENT_RESIZED) {
+						resized();
 						redraw(u);
+					}
 #endif
 					force_redraw = 1;
 				}
@@ -502,7 +544,7 @@ run(Uxn *u)
 				mouse_pos(devmouse,
 					clamp(event.motion.x - PAD, 0, uxn_screen.width - 1),
 					clamp(event.motion.y - PAD, 0, uxn_screen.height - 1));
-			else if(event.type == SDL_MOUSEBUTTONUP)
+			else if(event.type == SDL_MOUSEBUTTONUP && !mouse_steal(&event))
 				mouse_up(devmouse, SDL_BUTTON(event.button.button));
 			else if(event.type == SDL_MOUSEBUTTONDOWN && !mouse_steal(&event))
 				mouse_down(devmouse, SDL_BUTTON(event.button.button));

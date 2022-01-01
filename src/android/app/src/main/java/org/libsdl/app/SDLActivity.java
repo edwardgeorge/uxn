@@ -12,6 +12,7 @@ import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.res.AssetManager;
 import android.content.res.Configuration;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -58,6 +59,9 @@ import android.widget.Toast;
 
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Hashtable;
 import java.util.Locale;
 
@@ -294,10 +298,9 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         } catch(Exception ignored) {
         }
 
+        copyAssets();
         setContentView(mLayout);
-
         setWindowStyle(false);
-
         getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(this);
 
         // Get filename from "Open with" of another application
@@ -326,6 +329,24 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
         SDLActivity.handleNativeState();
     }
 
+    private void copyAssets() {
+        try {
+            AssetManager assets = getAssets();
+            for (String s : assets.list("")) {
+                if (!s.endsWith(".rom"))
+                    continue;
+                Path path = Paths.get(getCacheDir().getPath() + "/" + s);
+                if (Files.notExists(path)) {
+                    InputStream data = assets.open(s);
+                    Files.copy(data, path);
+                    data.close();
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "asset copy failed: " + e.getMessage());
+        }
+    }
+
     @Override
     protected void onNewIntent(Intent intent) {
         Uri uri = intent.getData();
@@ -350,7 +371,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
                     filename = "external.rom";
                 }
 
-                filename = this.getCacheDir().getPath() + "/" + filename;
+                filename = getCacheDir().getPath() + "/" + filename;
                 FileOutputStream out = new FileOutputStream(filename, false);
                 out.write(raw, 0, size);
                 out.close();

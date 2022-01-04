@@ -330,7 +330,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     private void copyAssets() {
         try {
             AssetManager assets = getAssets();
-            String dest = getCacheDir().getPath();
+            String dest = getFilesDir().getPath();
             byte []raw = new byte[65536];
 
             for (String s : assets.list("")) {
@@ -377,7 +377,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
                     filename = "external.rom";
                 }
 
-                filename = getCacheDir().getPath() + "/" + filename;
+                filename = getFilesDir().getPath() + "/" + filename;
                 FileOutputStream out = new FileOutputStream(filename, false);
                 out.write(raw, 0, size);
                 out.close();
@@ -1729,7 +1729,7 @@ class SDLMain implements Runnable {
         String[] args = new String[a.length + 2];
         System.arraycopy(a, 0, args, 0, a.length);
         args[a.length + 0] = "-cd";
-        args[a.length + 1] = SDLActivity.mSingleton.getCacheDir().getPath();
+        args[a.length + 1] = SDLActivity.mSingleton.getFilesDir().getPath();
 
         try {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY);

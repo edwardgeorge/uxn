@@ -109,11 +109,17 @@ stdin_handler(void *p)
 static void
 set_window_size(SDL_Window *window, int w, int h)
 {
+#ifdef __ANDROID__
+	(void)window;
+	(void)w;
+	(void)h;
+#else
 	SDL_Point win, win_old;
 	SDL_GetWindowPosition(window, &win.x, &win.y);
 	SDL_GetWindowSize(window, &win_old.x, &win_old.y);
 	SDL_SetWindowPosition(window, (win.x + win_old.x / 2) - w / 2, (win.y + win_old.y / 2) - h / 2);
 	SDL_SetWindowSize(window, w, h);
+#endif
 }
 
 static void
@@ -138,7 +144,6 @@ set_size(Uint16 width, Uint16 height, int is_resize)
 	gRect.w = uxn_screen.width;
 	gRect.h = uxn_screen.height;
 	if(gTexture != NULL) SDL_DestroyTexture(gTexture);
-	resized();
 	gTexture = SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, uxn_screen.width + PAD * 2, uxn_screen.height + PAD * 2);
 	if(gTexture == NULL || SDL_SetTextureBlendMode(gTexture, SDL_BLENDMODE_NONE))
 		return error("gTexture", SDL_GetError());
@@ -146,6 +151,7 @@ set_size(Uint16 width, Uint16 height, int is_resize)
 		return error("SDL_UpdateTexture", SDL_GetError());
 	if(is_resize)
 		set_window_size(gWindow, (uxn_screen.width + PAD * 2) * zoom, (uxn_screen.height + PAD * 2) * zoom);
+	resized();
 	return 1;
 }
 
@@ -193,7 +199,7 @@ init(void)
 	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0)
 		return error("sdl", SDL_GetError());
 #ifdef __ANDROID__
-	winflags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_BORDERLESS | SDL_WINDOW_INPUT_GRABBED;
+	winflags = SDL_WINDOW_RESIZABLE;
 #else
 	winflags = 0;
 #endif
@@ -502,7 +508,7 @@ mouse_steal(SDL_Event *event)
 			else
 				SDL_StartTextInput();
 		}
-		return event->type != SDL_MOUSEBUTTONUP;
+		return 1;
 	}
 #else
 	(void)event;
@@ -525,13 +531,12 @@ run(Uxn *u)
 			if(event.type == SDL_QUIT)
 				return error("Run", "Quit.");
 			else if(event.type == SDL_WINDOWEVENT) {
-				if(event.window.event == SDL_WINDOWEVENT_RESIZED || event.window.event == SDL_WINDOWEVENT_EXPOSED) {
+				int e = event.window.event;
+				if(e == SDL_WINDOWEVENT_RESTORED || e == SDL_WINDOWEVENT_RESIZED || e == SDL_WINDOWEVENT_EXPOSED) {
 #ifdef __ANDROID__
 					/* rotation does something weird, have to redraw twice */
-					if(event.window.event == SDL_WINDOWEVENT_RESIZED) {
-						resized();
-						redraw(u);
-					}
+					resized();
+					redraw(u);
 #endif
 					force_redraw = 1;
 				}

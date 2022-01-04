@@ -1,8 +1,7 @@
 #include "uxn.h"
 
 /*
-Copyright (u) 2021 Devine Lu Linvega
-Copyright (u) 2021 Andrew Alderwick
+Copyright (u) 2022 Devine Lu Linvega, Andrew Alderwick, Andrew Richards
 
 Permission to use, copy, modify, and distribute this software for any
 purpose with or without fee is hereby granted, provided that the above
@@ -12,136 +11,108 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
 WITH REGARD TO THIS SOFTWARE.
 */
 
-#define MODE_SHORT 0x20
-#define MODE_RETURN 0x40
-#define MODE_KEEP 0x80
-
-#pragma mark - Operations
-
 /* clang-format off */
 
-/* Utilities */
-static void   (*push)(Stack *s, Uint16 a);
-static Uint16 (*pop8)(Stack *s);
-static Uint16 (*pop)(Stack *s);
-static void   (*poke)(Uint8 *m, Uint16 a, Uint16 b);
-static Uint16 (*peek)(Uint8 *m, Uint16 a);
-static void   (*devw)(Device *d, Uint8 a, Uint16 b);
-static Uint16 (*devr)(Device *d, Uint8 a);
-static void   (*warp)(Uxn *u, Uint16 a);
-static void   (*pull)(Uxn *u);
-/* byte mode */
-static void   push8(Stack *s, Uint16 a) { if(s->ptr == 0xff) { s->error = 2; return; } s->dat[s->ptr++] = a; }
-static Uint16 pop8k(Stack *s) { if(s->kptr == 0) { s->error = 1; return 0; } return s->dat[--s->kptr]; }
-static Uint16 pop8d(Stack *s) { if(s->ptr == 0) { s->error = 1; return 0; } return s->dat[--s->ptr]; }
-static void   poke8(Uint8 *m, Uint16 a, Uint16 b) { m[a] = b; }
-static Uint16 peek8(Uint8 *m, Uint16 a) { return m[a]; }
-static void   devw8(Device *d, Uint8 a, Uint16 b) { d->dat[a & 0xf] = b; d->deo(d, a & 0x0f); }
-static Uint16 devr8(Device *d, Uint8 a) { return d->dei(d, a & 0x0f); }
-static void   warp8(Uxn *u, Uint16 a){ u->ram.ptr += (Sint8)a; }
-static void   pull8(Uxn *u){ push8(u->src, peek8(u->ram.dat, u->ram.ptr++)); }
-/* short mode */
-static void   push16(Stack *s, Uint16 a) { push8(s, a >> 8); push8(s, a); }
-static Uint16 pop16(Stack *s) { Uint8 a = pop8(s), b = pop8(s); return a + (b << 8); }
-	   void   poke16(Uint8 *m, Uint16 a, Uint16 b) { poke8(m, a, b >> 8); poke8(m, a + 1, b); }
-	   Uint16 peek16(Uint8 *m, Uint16 a) { return (peek8(m, a) << 8) + peek8(m, a + 1); }
-static void   devw16(Device *d, Uint8 a, Uint16 b) { devw8(d, a, b >> 8); devw8(d, a + 1, b); }
-static Uint16 devr16(Device *d, Uint8 a) { return (devr8(d, a) << 8) + devr8(d, a + 1); }
-static void   warp16(Uxn *u, Uint16 a){ u->ram.ptr = a; }
-static void   pull16(Uxn *u){ push16(u->src, peek16(u->ram.dat, u->ram.ptr++)); u->ram.ptr++; }
+/*	a,b,c: general use.  bs: byte/short bool. src, dst: stack ptrs, swapped in return mode.
+	pc: program counter. sp: ptr to src stack ptr. kptr: "keep" mode copy of src stack ptr.
+	x,y: macro in params. d: macro in device. j,k,dev: macro temp variables. o: macro out param. */
 
-#pragma mark - Core
+#define FAULT(s, n) { errcode = n * 2 + (s == &u->rst); goto fault; }
+#define PUSH8(s, x) { if(s->ptr == 0xff) { FAULT(s, 2) } s->dat[s->ptr++] = (x); }
+#define PUSH16(s, x) { if((j = s->ptr) >= 0xfe) { FAULT(s, 2) } k = (x); s->dat[j] = k >> 8; s->dat[j + 1] = k; s->ptr = j + 2; }
+#define PUSH(s, x) { if(bs) { PUSH16(s, (x)) } else { PUSH8(s, (x)) } }
+#define POP8(o) { if(!(j = *sp)) { FAULT(src, 1) } o = (Uint16)src->dat[--j]; *sp = j; }
+#define POP16(o) { if((j = *sp) <= 1) { FAULT(src, 1) } o = src->dat[j - 1]; o += src->dat[j - 2] << 8; *sp = j - 2; }
+#define POP(o) { if(bs) { POP16(o) } else { POP8(o) } }
+#define POKE(x, y) { if(bs) { u->ram[(x)] = (y) >> 8; u->ram[(x) + 1] = (y); } else { u->ram[(x)] = y; } }
+#define PEEK16(o, x) { o = (u->ram[(x)] << 8) + u->ram[(x) + 1]; }
+#define PEEK(o, x) { if(bs) { PEEK16(o, x) } else { o = u->ram[(x)]; } }
+#define DEVR(o, d, x) { dev = (d); o = dev->dei(dev, (x) & 0x0f); if(bs) { o = (o << 8) + dev->dei(dev, ((x) + 1) & 0x0f); } }
+#define DEVW8(x, y) { dev->dat[(x) & 0xf] = y; dev->deo(dev, (x) & 0x0f); }
+#define DEVW(d, x, y) { dev = (d); if(bs) { DEVW8((x), (y) >> 8); DEVW8((x) + 1, (y)); } else { DEVW8((x), (y)) } }
+#define WARP(x) { if(bs) pc = (x); else pc += (Sint8)(x); }
 
 int
-uxn_eval(Uxn *u, Uint16 vec)
+uxn_eval(Uxn *u, Uint16 pc)
 {
-	Uint8 instr;
-	Uint16 a,b,c;
-	if(!vec || u->dev[0].dat[0xf])
-		return 0;
-	u->ram.ptr = vec;
+	unsigned int a, b, c, j, k, bs, instr, errcode;
+	Uint8 kptr, *sp;
+	Stack *src, *dst;
+	Device *dev;
+	if(!pc || u->dev[0].dat[0xf]) return 0;
 	if(u->wst.ptr > 0xf8) u->wst.ptr = 0xf8;
-	while((instr = u->ram.dat[u->ram.ptr++])) {
+	while((instr = u->ram[pc++])) {
 		/* Return Mode */
-		if(instr & MODE_RETURN) {
-			u->src = &u->rst; 
-			u->dst = &u->wst;
+		if(instr & 0x40) {
+			src = &u->rst; dst = &u->wst;
 		} else {
-			u->src = &u->wst; 
-			u->dst = &u->rst;
+			src = &u->wst; dst = &u->rst;
 		}
 		/* Keep Mode */
-		if(instr & MODE_KEEP) {
-			pop8 = pop8k;
-			u->src->kptr = u->src->ptr;
+		if(instr & 0x80) {
+			kptr = src->ptr;
+			sp = &kptr;
 		} else {
-			pop8 = pop8d;
+			sp = &src->ptr;
 		}
 		/* Short Mode */
-		if(instr & MODE_SHORT) {
-			push = push16; pop = pop16;
-			poke = poke16; peek = peek16;
-			devw = devw16; devr = devr16;
-			warp = warp16; pull = pull16;
-		} else {
-			push = push8; pop = pop8;
-			poke = poke8; peek = peek8;
-			devw = devw8; devr = devr8;
-			warp = warp8; pull = pull8;
+		bs = instr & 0x20 ? 1 : 0;
+		switch(instr & 0x1f) {
+		/* Stack */
+		case 0x00: /* LIT */ if(bs) { PEEK16(a, pc) PUSH16(src, a) pc += 2; }
+		                     else   { a = u->ram[pc]; PUSH8(src, a) pc++; } break;
+		case 0x01: /* INC */ POP(a) PUSH(src, a + 1) break;
+		case 0x02: /* POP */ POP(a) break;
+		case 0x03: /* DUP */ POP(a) PUSH(src, a) PUSH(src, a) break;
+		case 0x04: /* NIP */ POP(a) POP(b) PUSH(src, a) break;
+		case 0x05: /* SWP */ POP(a) POP(b) PUSH(src, a) PUSH(src, b) break;
+		case 0x06: /* OVR */ POP(a) POP(b) PUSH(src, b) PUSH(src, a) PUSH(src, b) break;
+		case 0x07: /* ROT */ POP(a) POP(b) POP(c) PUSH(src, b) PUSH(src, a) PUSH(src, c) break;
+		/* Logic */
+		case 0x08: /* EQU */ POP(a) POP(b) PUSH8(src, b == a) break;
+		case 0x09: /* NEQ */ POP(a) POP(b) PUSH8(src, b != a) break;
+		case 0x0a: /* GTH */ POP(a) POP(b) PUSH8(src, b > a) break;
+		case 0x0b: /* LTH */ POP(a) POP(b) PUSH8(src, b < a) break;
+		case 0x0c: /* JMP */ POP(a) WARP(a) break;
+		case 0x0d: /* JCN */ POP(a) POP8(b) if(b) WARP(a) break;
+		case 0x0e: /* JSR */ POP(a) PUSH16(dst, pc) WARP(a) break;
+		case 0x0f: /* STH */ POP(a) PUSH(dst, a) break;
+		/* Memory */
+		case 0x10: /* LDZ */ POP8(a) PEEK(b, a) PUSH(src, b) break;
+		case 0x11: /* STZ */ POP8(a) POP(b) POKE(a, b) break;
+		case 0x12: /* LDR */ POP8(a) PEEK(b, pc + (Sint8)a) PUSH(src, b) break;
+		case 0x13: /* STR */ POP8(a) POP(b) c = pc + (Sint8)a; POKE(c, b) break;
+		case 0x14: /* LDA */ POP16(a) PEEK(b, a) PUSH(src, b) break;
+		case 0x15: /* STA */ POP16(a) POP(b) POKE(a, b) break;
+		case 0x16: /* DEI */ POP8(a) DEVR(b, &u->dev[a >> 4], a) PUSH(src, b) break;
+		case 0x17: /* DEO */ POP8(a) POP(b) DEVW(&u->dev[a >> 4], a, b) break;
+		/* Arithmetic */
+		case 0x18: /* ADD */ POP(a) POP(b) PUSH(src, b + a) break;
+		case 0x19: /* SUB */ POP(a) POP(b) PUSH(src, b - a) break;
+		case 0x1a: /* MUL */ POP(a) POP(b) PUSH(src, (Uint32)b * a) break;
+		case 0x1b: /* DIV */ POP(a) POP(b) if(a == 0) { FAULT(src, 3) } PUSH(src, b / a) break;
+		case 0x1c: /* AND */ POP(a) POP(b) PUSH(src, b & a) break;
+		case 0x1d: /* ORA */ POP(a) POP(b) PUSH(src, b | a) break;
+		case 0x1e: /* EOR */ POP(a) POP(b) PUSH(src, b ^ a) break;
+		case 0x1f: /* SFT */ POP8(a) POP(b) c = b >> (a & 0x0f) << ((a & 0xf0) >> 4); PUSH(src, c) break;
 		}
-		switch(instr & 0x1f){
-			/* Stack */
-			case 0x00: /* LIT */ pull(u); break;
-			case 0x01: /* INC */ a = pop(u->src); push(u->src, a + 1); break;
-			case 0x02: /* POP */ pop(u->src); break;
-			case 0x03: /* DUP */ a = pop(u->src); push(u->src, a); push(u->src, a); break;
-			case 0x04: /* NIP */ a = pop(u->src); pop(u->src); push(u->src, a); break;
-			case 0x05: /* SWP */ a = pop(u->src), b = pop(u->src); push(u->src, a); push(u->src, b); break;
-			case 0x06: /* OVR */ a = pop(u->src), b = pop(u->src); push(u->src, b); push(u->src, a); push(u->src, b); break;
-			case 0x07: /* ROT */ a = pop(u->src), b = pop(u->src), c = pop(u->src); push(u->src, b); push(u->src, a); push(u->src, c); break;
-			/* Logic */
-			case 0x08: /* EQU */ a = pop(u->src), b = pop(u->src); push8(u->src, b == a); break;
-			case 0x09: /* NEQ */ a = pop(u->src), b = pop(u->src); push8(u->src, b != a); break;
-			case 0x0a: /* GTH */ a = pop(u->src), b = pop(u->src); push8(u->src, b > a); break;
-			case 0x0b: /* LTH */ a = pop(u->src), b = pop(u->src); push8(u->src, b < a); break;
-			case 0x0c: /* JMP */ a = pop(u->src); warp(u, a); break;
-			case 0x0d: /* JCN */ a = pop(u->src); if(pop8(u->src)) warp(u, a); break;
-			case 0x0e: /* JSR */ a = pop(u->src); push16(u->dst, u->ram.ptr); warp(u, a); break;
-			case 0x0f: /* STH */ a = pop(u->src); push(u->dst, a); break;
-			/* Memory */
-			case 0x10: /* LDZ */ a = pop8(u->src); push(u->src, peek(u->ram.dat, a)); break;
-			case 0x11: /* STZ */ a = pop8(u->src); b = pop(u->src); poke(u->ram.dat, a, b); break;
-			case 0x12: /* LDR */ a = pop8(u->src); push(u->src, peek(u->ram.dat, u->ram.ptr + (Sint8)a)); break;
-			case 0x13: /* STR */ a = pop8(u->src); b = pop(u->src); poke(u->ram.dat, u->ram.ptr + (Sint8)a, b); break;
-			case 0x14: /* LDA */ a = pop16(u->src); push(u->src, peek(u->ram.dat, a)); break;
-			case 0x15: /* STA */ a = pop16(u->src); b = pop(u->src); poke(u->ram.dat, a, b); break;
-			case 0x16: /* DEI */ a = pop8(u->src); push(u->src, devr(&u->dev[a >> 4], a)); break;
-			case 0x17: /* DEO */ a = pop8(u->src); b = pop(u->src); devw(&u->dev[a >> 4], a, b); break;
-			/* Arithmetic */
-			case 0x18: /* ADD */ a = pop(u->src), b = pop(u->src); push(u->src, b + a); break;
-			case 0x19: /* SUB */ a = pop(u->src), b = pop(u->src); push(u->src, b - a); break;
-			case 0x1a: /* MUL */ a = pop(u->src), b = pop(u->src); push(u->src, (Uint32)b * a); break;
-			case 0x1b: /* DIV */ a = pop(u->src), b = pop(u->src); if(a == 0) { u->src->error = 3; a = 1; } push(u->src, b / a); break;
-			case 0x1c: /* AND */ a = pop(u->src), b = pop(u->src); push(u->src, b & a); break;
-			case 0x1d: /* ORA */ a = pop(u->src), b = pop(u->src); push(u->src, b | a); break;
-			case 0x1e: /* EOR */ a = pop(u->src), b = pop(u->src); push(u->src, b ^ a); break;
-			case 0x1f: /* SFT */ a = pop8(u->src), b = pop(u->src); push(u->src, b >> (a & 0x0f) << ((a & 0xf0) >> 4)); break;
-		}
-		if(u->wst.error) return uxn_halt(u, u->wst.error, "Working-stack", instr);
-		if(u->rst.error) return uxn_halt(u, u->rst.error, "Return-stack", instr);
 	}
 	return 1;
+
+fault:
+	return uxn_halt(u, errcode >> 1, (errcode & 1) == 0 ? "Working-stack" : "Return-stack", pc - 1);
 }
 
 /* clang-format on */
 
 int
-uxn_boot(Uxn *u)
+uxn_boot(Uxn *u, Uint8 *memory)
 {
 	Uint32 i;
 	char *cptr = (char *)u;
-	for(i = 0; i < sizeof(*u); ++i)
+	for(i = 0; i < sizeof(*u); i++)
 		cptr[i] = 0x00;
+	u->ram = memory;
 	return 1;
 }
 
@@ -151,7 +122,7 @@ uxn_port(Uxn *u, Uint8 id, Uint8 (*deifn)(Device *d, Uint8 port), void (*deofn)(
 	Device *d = &u->dev[id];
 	d->addr = id * 0x10;
 	d->u = u;
-	d->mem = u->ram.dat;
+	d->mem = u->ram;
 	d->dei = deifn;
 	d->deo = deofn;
 	return d;

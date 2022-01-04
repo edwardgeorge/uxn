@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
 #include "uxn.h"
@@ -31,8 +32,8 @@ inspect(Stack *s, char *name)
 {
 	Uint8 x, y;
 	fprintf(stderr, "\n%s\n", name);
-	for(y = 0; y < 0x04; ++y) {
-		for(x = 0; x < 0x08; ++x) {
+	for(y = 0; y < 0x04; y++) {
+		for(x = 0; x < 0x08; x++) {
 			Uint8 p = y * 0x08 + x;
 			fprintf(stderr,
 				p == s->ptr ? "[%02x]" : " %02x ",
@@ -71,7 +72,7 @@ static void
 console_deo(Device *d, Uint8 port)
 {
 	if(port == 0x1)
-		d->vector = peek16(d->dat, 0x0);
+		DEVPEEK16(d->vector, 0x0);
 	if(port > 0x7)
 		write(port - 0x7, (char *)&d->dat[port], 1);
 }
@@ -109,7 +110,7 @@ nil_dei(Device *d, Uint8 port)
 static void
 nil_deo(Device *d, Uint8 port)
 {
-	if(port == 0x1) d->vector = peek16(d->dat, 0x0);
+	if(port == 0x1) DEVPEEK16(d->vector, 0x0);
 }
 
 #pragma mark - Generics
@@ -117,9 +118,9 @@ nil_deo(Device *d, Uint8 port)
 static const char *errors[] = {"underflow", "overflow", "division by zero"};
 
 int
-uxn_halt(Uxn *u, Uint8 error, char *name, int id)
+uxn_halt(Uxn *u, Uint8 error, char *name, Uint16 addr)
 {
-	fprintf(stderr, "Halted: %s %s#%04x, at 0x%04x\n", name, errors[error - 1], id, u->ram.ptr);
+	fprintf(stderr, "Halted: %s %s#%04x, at 0x%04x\n", name, errors[error - 1], u->ram[addr], addr);
 	return 0;
 }
 
@@ -134,9 +135,9 @@ static void
 run(Uxn *u)
 {
 	Uint16 vec;
+	Device *d = devconsole;
 	while((!u->dev[0].dat[0xf]) && (read(0, &devconsole->dat[0x2], 1) > 0)) {
-		vec = peek16(devconsole->dat, 0);
-		if(!vec) vec = u->ram.ptr; /* continue after last BRK */
+		DEVPEEK16(vec, 0);
 		uxn_eval(u, vec);
 	}
 }
@@ -147,7 +148,7 @@ load(Uxn *u, char *filepath)
 	FILE *f;
 	int r;
 	if(!(f = fopen(filepath, "rb"))) return 0;
-	r = fread(u->ram.dat + PAGE_PROGRAM, 1, sizeof(u->ram.dat) - PAGE_PROGRAM, f);
+	r = fread(u->ram + PAGE_PROGRAM, 1, 0xffff - PAGE_PROGRAM, f);
 	fclose(f);
 	if(r < 1) return 0;
 	fprintf(stderr, "Loaded %s\n", filepath);
@@ -160,7 +161,7 @@ main(int argc, char **argv)
 	Uxn u;
 	int i, loaded = 0;
 
-	if(!uxn_boot(&u))
+	if(!uxn_boot(&u, (Uint8 *)calloc(0xffff, sizeof(Uint8))))
 		return error("Boot", "Failed");
 
 	/* system   */ devsystem = uxn_port(&u, 0x0, system_dei, system_deo);
@@ -180,7 +181,7 @@ main(int argc, char **argv)
 	/* empty    */ uxn_port(&u, 0xe, nil_dei, nil_deo);
 	/* empty    */ uxn_port(&u, 0xf, nil_dei, nil_deo);
 
-	for(i = 1; i < argc; ++i) {
+	for(i = 1; i < argc; i++) {
 		if(!loaded++) {
 			if(!load(&u, argv[i]))
 				return error("Load", "Failed");

@@ -1,7 +1,7 @@
 ( dev/console )
 
-|00 @System $e &debug
-|10 @Console $8 &write
+%HALT   { #010f DEO }
+%EMIT   { #18 DEO }
 
 ( init )
 
@@ -9,11 +9,11 @@
 
 	;hello-word 
 	&while
-		( send ) LDAk .Console/write DEO
+		( send ) LDAk EMIT
 		INC2 LDAk ,&while JCN
 	POP2
-	( show debugger ) #01 .System/debug DEO
+	( stop ) HALT
 
 BRK
 
-@hello-word "Hello 20 "Uxn!
+@hello-word "Hello 20 "Uxn! $1

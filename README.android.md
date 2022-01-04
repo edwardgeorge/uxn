@@ -2,6 +2,18 @@
 
 This is a working port of Uxn to run on Android.
 
+## Guide
+
+To get a proper on-screen keyboard, install "Hacker's Keyboard"
+from Google Play. Use it naturally, as you would use a physical keyboard,
+including pressing and holding modifiers (Ctrl, Alt, etc) with letters
+if a ROM requires it (like Noodle, to load or save an image).
+
+Tapping anywhere outside of ROM screen area will toggle the keyboard.
+
+`F4` will invoke "boot" ROM, which displays all the ROMs available for loading,
+including those you once downloaded with a browser and then opened using Uxn.
+
 ## Building yourself
 
 Easiest way to start is to install JDK first, then [Android

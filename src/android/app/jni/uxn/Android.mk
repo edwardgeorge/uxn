@@ -7,7 +7,7 @@ SDL_PATH := $(LOCAL_PATH)/../SDL
 UXN_DIR := $(LOCAL_PATH)/../../../../../
 LOCAL_C_INCLUDES := $(SDL_PATH)/include $(UXN_DIR)/src
 LOCAL_SRC_FILES :=  \
-	$(UXN_DIR)/src/uxn-fast.c \
+	$(UXN_DIR)/src/uxn.c \
 	$(UXN_DIR)/src/uxnemu.c \
 	$(UXN_DIR)/src/devices/audio.c \
 	$(UXN_DIR)/src/devices/controller.c \

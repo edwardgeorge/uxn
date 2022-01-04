@@ -57,11 +57,9 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Hashtable;
 import java.util.Locale;
 
@@ -332,14 +330,22 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
     private void copyAssets() {
         try {
             AssetManager assets = getAssets();
+            String dest = getCacheDir().getPath();
+            byte []raw = new byte[65536];
+
             for (String s : assets.list("")) {
                 if (!s.endsWith(".rom"))
                     continue;
-                Path path = Paths.get(getCacheDir().getPath() + "/" + s);
-                if (Files.notExists(path)) {
+
+                File file = new File(dest, s);
+                if (file.createNewFile()) {
                     InputStream data = assets.open(s);
-                    Files.copy(data, path);
+                    int size = data.read(raw, 0, 65536);
                     data.close();
+
+                    FileOutputStream out = new FileOutputStream(file.getPath(), false);
+                    out.write(raw, 0, size);
+                    out.close();
                 }
             }
         } catch (Exception e) {

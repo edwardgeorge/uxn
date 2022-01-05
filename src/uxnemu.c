@@ -17,6 +17,7 @@
 #pragma GCC diagnostic ignored "-Wpedantic"
 #pragma clang diagnostic ignored "-Wtypedef-redefinition"
 #include <SDL.h>
+#include "devices/system.h"
 #include "devices/screen.h"
 #include "devices/audio.h"
 #include "devices/file.h"
@@ -144,7 +145,10 @@ set_size(Uint16 width, Uint16 height, int is_resize)
 	gRect.w = uxn_screen.width;
 	gRect.h = uxn_screen.height;
 	if(gTexture != NULL) SDL_DestroyTexture(gTexture);
-	gTexture = SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, uxn_screen.width + PAD * 2, uxn_screen.height + PAD * 2);
+#ifndef __ANDROID__
+	SDL_RenderSetLogicalSize(gRenderer, uxn_screen.width + PAD * 2, uxn_screen.height + PAD * 2);
+#endif
+	gTexture = SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STATIC, uxn_screen.width, uxn_screen.height);
 	if(gTexture == NULL || SDL_SetTextureBlendMode(gTexture, SDL_BLENDMODE_NONE))
 		return error("gTexture", SDL_GetError());
 	if(SDL_UpdateTexture(gTexture, NULL, uxn_screen.pixels, sizeof(Uint32)) != 0)
@@ -161,12 +165,12 @@ redraw(Uxn *u)
 	if(devsystem->dat[0xe])
 		screen_debug(&uxn_screen, u->wst.dat, u->wst.ptr, u->rst.ptr, u->ram);
 	screen_redraw(&uxn_screen, uxn_screen.pixels);
-	if(SDL_UpdateTexture(gTexture, &gRect, uxn_screen.pixels, uxn_screen.width * sizeof(Uint32)) != 0)
+	if(SDL_UpdateTexture(gTexture, NULL, uxn_screen.pixels, uxn_screen.width * sizeof(Uint32)) != 0)
 		error("SDL_UpdateTexture", SDL_GetError());
 	SDL_RenderClear(gRenderer);
+#ifdef __ANDROID__
 	gScrDst.x = 0;
 	gScrDst.y = 0;
-#ifdef __ANDROID__
 	if(gScrSize.y > gScrSize.x) { /* portrait */
 		gScrDst.w = gScrSize.x;
 		gScrDst.h = gScrSize.x * uxn_screen.height / uxn_screen.width;
@@ -175,11 +179,10 @@ redraw(Uxn *u)
 		gScrDst.w = gScrSize.y * uxn_screen.width / uxn_screen.height;
 		gScrDst.x = (gScrSize.x - gScrDst.w) / 2;
 	}
-#else
-	gScrDst.w = gScrSize.x;
-	gScrDst.h = gScrSize.y;
-#endif
 	SDL_RenderCopy(gRenderer, gTexture, NULL, &gScrDst);
+#else
+	SDL_RenderCopy(gRenderer, gTexture, NULL, &gRect);
+#endif
 	SDL_RenderPresent(gRenderer);
 }
 
@@ -209,6 +212,7 @@ init(void)
 	gRenderer = SDL_CreateRenderer(gWindow, -1, 0);
 	if(gRenderer == NULL)
 		return error("sdl_renderer", SDL_GetError());
+	SDL_SetRenderDrawColor(gRenderer, 0x00, 0x00, 0x00, 0xff);
 	audio_id = SDL_OpenAudioDevice(NULL, 0, &as, NULL, 0);
 	if(!audio_id)
 		error("sdl_audio", SDL_GetError());
@@ -225,23 +229,9 @@ init(void)
 
 #pragma mark - Devices
 
-static Uint8
-system_dei(Device *d, Uint8 port)
+void
+system_deo_special(Device *d, Uint8 port)
 {
-	switch(port) {
-	case 0x2: return d->u->wst.ptr;
-	case 0x3: return d->u->rst.ptr;
-	default: return d->dat[port];
-	}
-}
-
-static void
-system_deo(Device *d, Uint8 port)
-{
-	switch(port) {
-	case 0x2: d->u->wst.ptr = d->dat[port]; break;
-	case 0x3: d->u->rst.ptr = d->dat[port]; break;
-	}
 	if(port > 0x7 && port < 0xe)
 		screen_palette(&uxn_screen, &d->dat[0x8]);
 }
@@ -340,10 +330,12 @@ load(Uxn *u, char *rom)
 	return 1;
 }
 
+static Uint8 *memory;
+
 static int
 start(Uxn *u, char *rom)
 {
-	Uint8 *memory = (Uint8 *)calloc(0xffff, sizeof(Uint8));
+	memory = (Uint8 *)calloc(0xffff, sizeof(Uint8));
 	if(!uxn_boot(u, memory))
 		return error("Boot", "Failed to start uxn.");
 	if(!load(u, rom))
@@ -471,15 +463,6 @@ do_shortcut(Uxn *u, SDL_Event *event)
 		capture_screen();
 	else if(event->key.keysym.sym == SDLK_F4)
 		restart(u);
-}
-
-static const char *errors[] = {"underflow", "overflow", "division by zero"};
-
-int
-uxn_halt(Uxn *u, Uint8 error, char *name, Uint16 addr)
-{
-	fprintf(stderr, "Halted: %s %s#%04x, at 0x%04x\n", name, errors[error - 1], u->ram[addr], addr);
-	return 0;
 }
 
 static int

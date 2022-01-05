@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <time.h>
 #include "uxn.h"
+#include "devices/system.h"
 #include "devices/file.h"
 
 /*
@@ -45,26 +46,12 @@ inspect(Stack *s, char *name)
 
 #pragma mark - Devices
 
-static Uint8
-system_dei(Device *d, Uint8 port)
+void
+system_deo_special(Device *d, Uint8 port)
 {
-	switch(port) {
-	case 0x2: return d->u->wst.ptr;
-	case 0x3: return d->u->rst.ptr;
-	default: return d->dat[port];
-	}
-}
-
-static void
-system_deo(Device *d, Uint8 port)
-{
-	switch(port) {
-	case 0x2: d->u->wst.ptr = d->dat[port]; break;
-	case 0x3: d->u->rst.ptr = d->dat[port]; break;
-	case 0xe:
+	if(port == 0xe) {
 		inspect(&d->u->wst, "Working-stack");
 		inspect(&d->u->rst, "Return-stack");
-		break;
 	}
 }
 
@@ -115,15 +102,6 @@ nil_deo(Device *d, Uint8 port)
 
 #pragma mark - Generics
 
-static const char *errors[] = {"underflow", "overflow", "division by zero"};
-
-int
-uxn_halt(Uxn *u, Uint8 error, char *name, Uint16 addr)
-{
-	fprintf(stderr, "Halted: %s %s#%04x, at 0x%04x\n", name, errors[error - 1], u->ram[addr], addr);
-	return 0;
-}
-
 static int
 console_input(Uxn *u, char c)
 {
@@ -155,13 +133,16 @@ load(Uxn *u, char *filepath)
 	return 1;
 }
 
+static Uint8 *memory;
+
 int
 main(int argc, char **argv)
 {
 	Uxn u;
 	int i, loaded = 0;
 
-	if(!uxn_boot(&u, (Uint8 *)calloc(0xffff, sizeof(Uint8))))
+	memory = (Uint8 *)calloc(0xffff, sizeof(Uint8));
+	if(!uxn_boot(&u, memory))
 		return error("Boot", "Failed");
 
 	/* system   */ devsystem = uxn_port(&u, 0x0, system_dei, system_deo);

@@ -14,7 +14,9 @@ LOCAL_SRC_FILES :=  \
 	$(UXN_DIR)/src/devices/file.c \
 	$(UXN_DIR)/src/devices/mouse.c \
 	$(UXN_DIR)/src/devices/screen.c \
-	$(UXN_DIR)/src/devices/screen_aarch64.c
+	$(UXN_DIR)/src/devices/screen_aarch64.c \
+	$(UXN_DIR)/src/devices/system.c \
+
 LOCAL_SHARED_LIBRARIES := SDL2
 LOCAL_LDLIBS := -lGLESv1_CM -lGLESv2 -llog
 

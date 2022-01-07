@@ -1,8 +1,12 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
+
 #include "uxn.h"
+#include "devices/system.h"
 #include "devices/file.h"
+#include "devices/datetime.h"
 
 /*
 Copyright (c) 2021 Devine Lu Linvega
@@ -31,8 +35,8 @@ inspect(Stack *s, char *name)
 {
 	Uint8 x, y;
 	fprintf(stderr, "\n%s\n", name);
-	for(y = 0; y < 0x04; ++y) {
-		for(x = 0; x < 0x08; ++x) {
+	for(y = 0; y < 0x04; y++) {
+		for(x = 0; x < 0x08; x++) {
 			Uint8 p = y * 0x08 + x;
 			fprintf(stderr,
 				p == s->ptr ? "[%02x]" : " %02x ",
@@ -44,26 +48,12 @@ inspect(Stack *s, char *name)
 
 #pragma mark - Devices
 
-static Uint8
-system_dei(Device *d, Uint8 port)
+void
+system_deo_special(Device *d, Uint8 port)
 {
-	switch(port) {
-	case 0x2: return d->u->wst.ptr;
-	case 0x3: return d->u->rst.ptr;
-	default: return d->dat[port];
-	}
-}
-
-static void
-system_deo(Device *d, Uint8 port)
-{
-	switch(port) {
-	case 0x2: d->u->wst.ptr = d->dat[port]; break;
-	case 0x3: d->u->rst.ptr = d->dat[port]; break;
-	case 0xe:
-		inspect(&d->u->wst, "Working-stack");
-		inspect(&d->u->rst, "Return-stack");
-		break;
+	if(port == 0xe) {
+		inspect(d->u->wst, "Working-stack");
+		inspect(d->u->rst, "Return-stack");
 	}
 }
 
@@ -71,33 +61,9 @@ static void
 console_deo(Device *d, Uint8 port)
 {
 	if(port == 0x1)
-		d->vector = peek16(d->dat, 0x0);
+		DEVPEEK16(d->vector, 0x0);
 	if(port > 0x7)
 		write(port - 0x7, (char *)&d->dat[port], 1);
-}
-
-static Uint8
-datetime_dei(Device *d, Uint8 port)
-{
-	time_t seconds = time(NULL);
-	struct tm zt = {0};
-	struct tm *t = localtime(&seconds);
-	if(t == NULL)
-		t = &zt;
-	switch(port) {
-	case 0x0: return (t->tm_year + 1900) >> 8;
-	case 0x1: return (t->tm_year + 1900);
-	case 0x2: return t->tm_mon;
-	case 0x3: return t->tm_mday;
-	case 0x4: return t->tm_hour;
-	case 0x5: return t->tm_min;
-	case 0x6: return t->tm_sec;
-	case 0x7: return t->tm_wday;
-	case 0x8: return t->tm_yday >> 8;
-	case 0x9: return t->tm_yday;
-	case 0xa: return t->tm_isdst;
-	default: return d->dat[port];
-	}
 }
 
 static Uint8
@@ -109,19 +75,10 @@ nil_dei(Device *d, Uint8 port)
 static void
 nil_deo(Device *d, Uint8 port)
 {
-	if(port == 0x1) d->vector = peek16(d->dat, 0x0);
+	if(port == 0x1) DEVPEEK16(d->vector, 0x0);
 }
 
 #pragma mark - Generics
-
-static const char *errors[] = {"underflow", "overflow", "division by zero"};
-
-int
-uxn_halt(Uxn *u, Uint8 error, char *name, int id)
-{
-	fprintf(stderr, "Halted: %s %s#%04x, at 0x%04x\n", name, errors[error - 1], id, u->ram.ptr);
-	return 0;
-}
 
 static int
 console_input(Uxn *u, char c)
@@ -134,9 +91,9 @@ static void
 run(Uxn *u)
 {
 	Uint16 vec;
+	Device *d = devconsole;
 	while((!u->dev[0].dat[0xf]) && (read(0, &devconsole->dat[0x2], 1) > 0)) {
-		vec = peek16(devconsole->dat, 0);
-		if(!vec) vec = u->ram.ptr; /* continue after last BRK */
+		DEVPEEK16(vec, 0);
 		uxn_eval(u, vec);
 	}
 }
@@ -147,12 +104,14 @@ load(Uxn *u, char *filepath)
 	FILE *f;
 	int r;
 	if(!(f = fopen(filepath, "rb"))) return 0;
-	r = fread(u->ram.dat + PAGE_PROGRAM, 1, sizeof(u->ram.dat) - PAGE_PROGRAM, f);
+	r = fread(u->ram + PAGE_PROGRAM, 1, 0xffff - PAGE_PROGRAM, f);
 	fclose(f);
 	if(r < 1) return 0;
 	fprintf(stderr, "Loaded %s\n", filepath);
 	return 1;
 }
+
+static Uint8 *shadow, *memory;
 
 int
 main(int argc, char **argv)
@@ -160,7 +119,9 @@ main(int argc, char **argv)
 	Uxn u;
 	int i, loaded = 0;
 
-	if(!uxn_boot(&u))
+	shadow = (Uint8 *)calloc(0xffff, sizeof(Uint8));
+	memory = (Uint8 *)calloc(0xffff, sizeof(Uint8));
+	if(!uxn_boot(&u, memory, shadow + PAGE_DEV, (Stack *)(shadow + PAGE_WST), (Stack *)(shadow + PAGE_RST)))
 		return error("Boot", "Failed");
 
 	/* system   */ devsystem = uxn_port(&u, 0x0, system_dei, system_deo);
@@ -180,7 +141,7 @@ main(int argc, char **argv)
 	/* empty    */ uxn_port(&u, 0xe, nil_dei, nil_deo);
 	/* empty    */ uxn_port(&u, 0xf, nil_dei, nil_deo);
 
-	for(i = 1; i < argc; ++i) {
+	for(i = 1; i < argc; i++) {
 		if(!loaded++) {
 			if(!load(&u, argv[i]))
 				return error("Load", "Failed");

@@ -10,4 +10,4 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
 WITH REGARD TO THIS SOFTWARE.
 */
 
-void file_deo(Device *d, Uint8 port);
+Uint8 datetime_dei(Device *d, Uint8 port);

@@ -1,6 +1,6 @@
 #include <stdio.h>
-#include <unistd.h>
 #include <time.h>
+
 #include "uxn.h"
 
 #ifdef __ANDROID__
@@ -23,6 +23,7 @@
 #include "devices/file.h"
 #include "devices/controller.h"
 #include "devices/mouse.h"
+#include "devices/datetime.h"
 #pragma GCC diagnostic pop
 #pragma clang diagnostic pop
 
@@ -56,7 +57,7 @@ static SDL_Rect gScrDst;
 
 /* devices */
 
-static Device *devsystem, *devscreen, *devmouse, *devctrl, *devaudio0, *devconsole;
+static Device *devscreen, *devmouse, *devctrl, *devaudio0;
 static Uint8 zoom = 1;
 static Uint32 stdin_event, audio0_event;
 
@@ -96,12 +97,19 @@ audio_finished_handler(UxnAudio *c)
 	SDL_PushEvent(&event);
 }
 
+int
+uxn_interrupt(Uxn *u)
+{
+	(void)u;
+	return 0;
+}
+
 static int
 stdin_handler(void *p)
 {
 	SDL_Event event;
 	event.type = stdin_event;
-	while(read(0, &event.cbutton.button, 1) > 0)
+	while(fread(&event.cbutton.button, 1, 1, stdin) > 0)
 		SDL_PushEvent(&event);
 	return 0;
 	(void)p;
@@ -148,7 +156,7 @@ set_size(Uint16 width, Uint16 height, int is_resize)
 #ifndef __ANDROID__
 	SDL_RenderSetLogicalSize(gRenderer, uxn_screen.width + PAD * 2, uxn_screen.height + PAD * 2);
 #endif
-	gTexture = SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_XRGB8888, SDL_TEXTUREACCESS_STATIC, uxn_screen.width, uxn_screen.height);
+	gTexture = SDL_CreateTexture(gRenderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STATIC, uxn_screen.width, uxn_screen.height);
 	if(gTexture == NULL || SDL_SetTextureBlendMode(gTexture, SDL_BLENDMODE_NONE))
 		return error("gTexture", SDL_GetError());
 	if(SDL_UpdateTexture(gTexture, NULL, uxn_screen.pixels, sizeof(Uint32)) != 0)
@@ -160,10 +168,8 @@ set_size(Uint16 width, Uint16 height, int is_resize)
 }
 
 static void
-redraw(Uxn *u)
+redraw(void)
 {
-	if(devsystem->dat[0xe])
-		screen_debug(&uxn_screen, u->wst.dat, u->wst.ptr, u->rst.ptr, u->ram);
 	screen_redraw(&uxn_screen, uxn_screen.pixels);
 	if(SDL_UpdateTexture(gTexture, NULL, uxn_screen.pixels, uxn_screen.width * sizeof(Uint32)) != 0)
 		error("SDL_UpdateTexture", SDL_GetError());
@@ -239,10 +245,12 @@ system_deo_special(Device *d, Uint8 port)
 static void
 console_deo(Device *d, Uint8 port)
 {
-	if(port == 0x1)
-		DEVPEEK16(d->vector, 0x0);
-	if(port > 0x7)
-		write(port - 0x7, (char *)&d->dat[port], 1);
+	FILE *fd = port == 0x8 ? stdout : port == 0x9 ? stderr
+												  : 0;
+	if(fd) {
+		fputc(d->dat[port], fd);
+		fflush(fd);
+	}
 }
 
 static Uint8
@@ -268,37 +276,13 @@ audio_deo(Device *d, Uint8 port)
 		DEVPEEK16(adsr, 0x8);
 		DEVPEEK16(c->len, 0xa);
 		DEVPEEK16(addr, 0xc);
-		c->addr = &d->mem[addr];
+		c->addr = &d->u->ram[addr];
 		c->volume[0] = d->dat[0xe] >> 4;
 		c->volume[1] = d->dat[0xe] & 0xf;
 		c->repeat = !(d->dat[0xf] & 0x80);
 		audio_start(c, adsr, d->dat[0xf] & 0x7f);
 		SDL_UnlockAudioDevice(audio_id);
 		SDL_PauseAudioDevice(audio_id, 0);
-	}
-}
-
-static Uint8
-datetime_dei(Device *d, Uint8 port)
-{
-	time_t seconds = time(NULL);
-	struct tm zt = {0};
-	struct tm *t = localtime(&seconds);
-	if(t == NULL)
-		t = &zt;
-	switch(port) {
-	case 0x0: return (t->tm_year + 1900) >> 8;
-	case 0x1: return (t->tm_year + 1900);
-	case 0x2: return t->tm_mon;
-	case 0x3: return t->tm_mday;
-	case 0x4: return t->tm_hour;
-	case 0x5: return t->tm_min;
-	case 0x6: return t->tm_sec;
-	case 0x7: return t->tm_wday;
-	case 0x8: return t->tm_yday >> 8;
-	case 0x9: return t->tm_yday;
-	case 0xa: return t->tm_isdst;
-	default: return d->dat[port];
 	}
 }
 
@@ -311,7 +295,8 @@ nil_dei(Device *d, Uint8 port)
 static void
 nil_deo(Device *d, Uint8 port)
 {
-	if(port == 0x1) DEVPEEK16(d->vector, 0x0);
+	(void)d;
+	(void)port;
 }
 
 /* Boot */
@@ -322,7 +307,7 @@ load(Uxn *u, char *rom)
 	SDL_RWops *f;
 	int r;
 	if(!(f = SDL_RWFromFile(rom, "rb"))) return 0;
-	r = f->read(f, u->ram + PAGE_PROGRAM, 1, 0xffff - PAGE_PROGRAM);
+	r = f->read(f, u->ram + PAGE_PROGRAM, 1, 0x10000 - PAGE_PROGRAM);
 	f->close(f);
 	if(r < 1) return 0;
 	fprintf(stderr, "Loaded %s\n", rom);
@@ -330,19 +315,15 @@ load(Uxn *u, char *rom)
 	return 1;
 }
 
-static Uint8 *memory;
-
 static int
 start(Uxn *u, char *rom)
 {
-	memory = (Uint8 *)calloc(0xffff, sizeof(Uint8));
-	if(!uxn_boot(u, memory))
+	if(!uxn_boot(u, (Uint8 *)calloc(0x10000, sizeof(Uint8))))
 		return error("Boot", "Failed to start uxn.");
 	if(!load(u, rom))
 		return error("Boot", "Failed to load rom.");
-
-	/* system   */ devsystem = uxn_port(u, 0x0, system_dei, system_deo);
-	/* console  */ devconsole = uxn_port(u, 0x1, nil_dei, console_deo);
+	/* system   */ uxn_port(u, 0x0, system_dei, system_deo);
+	/* console  */ uxn_port(u, 0x1, nil_dei, console_deo);
 	/* screen   */ devscreen = uxn_port(u, 0x2, screen_dei, screen_deo);
 	/* audio0   */ devaudio0 = uxn_port(u, 0x3, audio_dei, audio_deo);
 	/* audio1   */ uxn_port(u, 0x4, audio_dei, audio_deo);
@@ -357,13 +338,8 @@ start(Uxn *u, char *rom)
 	/* unused   */ uxn_port(u, 0xd, nil_dei, nil_deo);
 	/* unused   */ uxn_port(u, 0xe, nil_dei, nil_deo);
 	/* unused   */ uxn_port(u, 0xf, nil_dei, nil_deo);
-
-	screen_clear(&uxn_screen, &uxn_screen.fg);
-	screen_clear(&uxn_screen, &uxn_screen.bg);
-
 	if(!uxn_eval(u, PAGE_PROGRAM))
 		return error("Boot", "Failed to start rom.");
-
 	return 1;
 }
 
@@ -376,13 +352,6 @@ set_zoom(Uint8 scale)
 	zoom = clamp(scale, 1, 3);
 	set_window_size(gWindow, (uxn_screen.width + PAD * 2) * zoom, (uxn_screen.height + PAD * 2) * zoom);
 #endif
-}
-
-static void
-toggle_debugger(void)
-{
-	devsystem->dat[0xe] = !devsystem->dat[0xe];
-	screen_clear(&uxn_screen, &uxn_screen.fg);
 }
 
 static void
@@ -406,7 +375,7 @@ static void
 restart(Uxn *u)
 {
 	set_size(WIDTH, HEIGHT, 1);
-	start(u, "boot.rom");
+	start(u, "launcher.rom");
 }
 
 static Uint8
@@ -458,7 +427,7 @@ do_shortcut(Uxn *u, SDL_Event *event)
 	if(event->key.keysym.sym == SDLK_F1)
 		set_zoom(zoom > 2 ? 1 : zoom + 1);
 	else if(event->key.keysym.sym == SDLK_F2)
-		toggle_debugger();
+		system_inspect(u);
 	else if(event->key.keysym.sym == SDLK_F3)
 		capture_screen();
 	else if(event->key.keysym.sym == SDLK_F4)
@@ -468,8 +437,9 @@ do_shortcut(Uxn *u, SDL_Event *event)
 static int
 console_input(Uxn *u, char c)
 {
-	devconsole->dat[0x2] = c;
-	return uxn_eval(u, devconsole->vector);
+	Device *d = &u->dev[1];
+	d->dat[0x2] = c;
+	return uxn_eval(u, GETVECTOR(d));
 }
 
 static int
@@ -502,8 +472,9 @@ mouse_steal(SDL_Event *event)
 static int
 run(Uxn *u)
 {
-	redraw(u);
-	while(!devsystem->dat[0xf]) {
+	Device *devsys = &u->dev[0];
+	redraw();
+	while(!devsys->dat[0xf]) {
 		SDL_Event event;
 		double elapsed, begin;
 		int force_redraw = 0;
@@ -519,11 +490,12 @@ run(Uxn *u)
 #ifdef __ANDROID__
 					/* rotation does something weird, have to redraw twice */
 					resized();
-					redraw(u);
+					redraw();
 #endif
 					force_redraw = 1;
 				}
 			} else if(event.type == SDL_DROPFILE) {
+				set_size(WIDTH, HEIGHT, 0);
 				start(u, event.drop.file);
 				SDL_free(event.drop.file);
 				force_redraw = 1;
@@ -531,9 +503,7 @@ run(Uxn *u)
 			/* Audio */
 			else if(event.type >= audio0_event && event.type < audio0_event + POLYPHONY) {
 				Device *d = devaudio0 + (event.type - audio0_event);
-				Uint16 res;
-				DEVPEEK16(res, 0x00);
-				uxn_eval(u, res);
+				uxn_eval(u, GETVECTOR(d));
 			}
 			/* Mouse */
 			else if(event.type == SDL_MOUSEMOTION && !mouse_steal(&event))
@@ -576,9 +546,9 @@ run(Uxn *u)
 			else if(event.type == stdin_event)
 				console_input(u, event.cbutton.button);
 		}
-		uxn_eval(u, devscreen->vector);
-		if(uxn_screen.fg.changed || uxn_screen.bg.changed || devsystem->dat[0xe] || force_redraw)
-			redraw(u);
+		uxn_eval(u, GETVECTOR(devscreen));
+		if(uxn_screen.fg.changed || uxn_screen.bg.changed || force_redraw)
+			redraw();
 		if(!BENCH) {
 			elapsed = (SDL_GetPerformanceCounter() - begin) / (double)SDL_GetPerformanceFrequency() * 1000.0f;
 			SDL_Delay(clamp(16.666f - elapsed, 0, 1000));
@@ -623,7 +593,7 @@ main(int argc, char **argv)
 			console_input(&u, '\n');
 		}
 	}
-	if(!loaded && !start(&u, "boot.rom"))
+	if(!loaded && !start(&u, "launcher.rom"))
 		return error("usage", "uxnemu [-s scale] file.rom");
 	run(&u);
 	SDL_Quit();

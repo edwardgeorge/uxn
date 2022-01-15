@@ -13,8 +13,6 @@ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
 WITH REGARD TO THIS SOFTWARE.
 */
 
-#define _POSIX_C_SOURCE 200809L
-
 #include <stdio.h>
 #include <dirent.h>
 #include <string.h>
@@ -53,13 +51,13 @@ get_entry(char *p, Uint16 len, const char *pathname, const char *basename, int f
 	if(len < strlen(basename) + 7)
 		return 0;
 	if(stat(pathname, &st))
-		return fail_nonzero ? snprintf(p, len, "!!!! %s\n", basename) : 0;
+		return fail_nonzero ? sprintf(p, "!!!! %s\n", basename) : 0;
 	else if(S_ISDIR(st.st_mode))
-		return snprintf(p, len, "---- %s\n", basename);
+		return sprintf(p, "---- %s\n", basename);
 	else if(st.st_size < 0x10000)
-		return snprintf(p, len, "%04x %s\n", (Uint16)st.st_size, basename);
+		return sprintf(p, "%04x %s\n", (unsigned int)st.st_size, basename);
 	else
-		return snprintf(p, len, "???? %s\n", basename);
+		return sprintf(p, "???? %s\n", basename);
 }
 
 static Uint16
@@ -72,7 +70,10 @@ file_read_dir(char *dest, Uint16 len)
 		Uint16 n;
 		if(de->d_name[0] == '.' && de->d_name[1] == '\0')
 			continue;
-		snprintf(pathname, sizeof(pathname), "%s/%s", current_filename, de->d_name);
+		if(strlen(current_filename) + 1 + strlen(de->d_name) < sizeof(pathname))
+			sprintf(pathname, "%s/%s", current_filename, de->d_name);
+		else
+			pathname[0] = '\0';
 		n = get_entry(p, len, pathname, de->d_name, 1);
 		if(!n) break;
 		p += n;
@@ -146,34 +147,31 @@ file_deo(Device *d, Uint8 port)
 {
 	Uint16 a, b, res;
 	switch(port) {
-	case 0x1:
-		DEVPEEK16(d->vector, 0x0);
+	case 0x5:
+		DEVPEEK16(a, 0x4);
+		DEVPEEK16(b, 0xa);
+		res = file_stat(&d->u->ram[a], b);
+		DEVPOKE16(0x2, res);
+		break;
+	case 0x6:
+		res = file_delete();
+		DEVPOKE16(0x2, res);
 		break;
 	case 0x9:
 		DEVPEEK16(a, 0x8);
-		res = file_init(&d->mem[a]);
+		res = file_init(&d->u->ram[a]);
 		DEVPOKE16(0x2, res);
 		break;
 	case 0xd:
 		DEVPEEK16(a, 0xc);
 		DEVPEEK16(b, 0xa);
-		res = file_read(&d->mem[a], b);
+		res = file_read(&d->u->ram[a], b);
 		DEVPOKE16(0x2, res);
 		break;
 	case 0xf:
 		DEVPEEK16(a, 0xe);
 		DEVPEEK16(b, 0xa);
-		res = file_write(&d->mem[a], b, d->dat[0x7]);
-		DEVPOKE16(0x2, res);
-		break;
-	case 0x5:
-		DEVPEEK16(a, 0x4);
-		DEVPEEK16(b, 0xa);
-		res = file_stat(&d->mem[a], b);
-		DEVPOKE16(0x2, res);
-		break;
-	case 0x6:
-		res = file_delete();
+		res = file_write(&d->u->ram[a], b, d->dat[0x7]);
 		DEVPOKE16(0x2, res);
 		break;
 	}

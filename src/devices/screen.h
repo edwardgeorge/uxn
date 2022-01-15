@@ -1,5 +1,3 @@
-#include <stdlib.h>
-
 /*
 Copyright (c) 2021 Devine Lu Linvega
 Copyright (c) 2021 Andrew Alderwick
@@ -15,8 +13,7 @@ WITH REGARD TO THIS SOFTWARE.
 #define FIXED_SIZE 0
 
 typedef struct Layer {
-	Uint8 *pixels;
-	Uint8 changed;
+	Uint8 *pixels, changed;
 } Layer;
 
 typedef struct UxnScreen {
@@ -34,7 +31,6 @@ void screen_palette(UxnScreen *p, Uint8 *addr);
 void screen_resize(UxnScreen *p, Uint16 width, Uint16 height);
 void screen_clear(UxnScreen *p, Layer *layer);
 void screen_redraw(UxnScreen *p, Uint32 *pixels);
-void screen_debug(UxnScreen *p, Uint8 *stack, Uint8 wptr, Uint8 rptr, Uint8 *memory);
 
 Uint8 screen_dei(Device *d, Uint8 port);
 void screen_deo(Device *d, Uint8 port);

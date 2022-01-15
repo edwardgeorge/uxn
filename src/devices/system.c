@@ -22,19 +22,41 @@ static const char *errors[] = {
 	"Working-stack division by zero",
 	"Return-stack division by zero"};
 
+static void
+system_print(Stack *s, char *name)
+{
+	Uint8 i;
+	fprintf(stderr, "<%s>", name);
+	for(i = 0; i < s->ptr; i++)
+		fprintf(stderr, " %02x", s->dat[i]);
+	if(!i)
+		fprintf(stderr, " empty");
+	fprintf(stderr, "\n");
+}
+
+void
+system_inspect(Uxn *u)
+{
+	system_print(&u->wst, "wst");
+	system_print(&u->rst, "rst");
+}
+
 int
 uxn_halt(Uxn *u, Uint8 error, Uint16 addr)
 {
 	Device *d = &u->dev[0];
-	Uint16 vec = d->vector;
+	Uint16 vec = GETVECTOR(d);
+	DEVPOKE16(0x4, addr);
+	d->dat[0x6] = error;
 	if(vec) {
-		d->vector = 0; /* need to rearm to run System/vector again */
-		DEVPOKE16(0x4, addr);
-		d->dat[0x6] = error;
+		/* need to rearm to run System/vector again */
+		d->dat[0] = 0;
+		d->dat[1] = 0;
 		if(error != 2) /* working stack overflow has special treatment */
 			vec += 0x0004;
 		return uxn_eval(u, vec);
 	}
+	system_inspect(u);
 	fprintf(stderr, "Halted: %s#%04x, at 0x%04x\n", errors[error], u->ram[addr], addr);
 	return 0;
 }
@@ -55,9 +77,9 @@ void
 system_deo(Device *d, Uint8 port)
 {
 	switch(port) {
-	case 0x1: DEVPEEK16(d->vector, 0x0); break;
 	case 0x2: d->u->wst.ptr = d->dat[port]; break;
 	case 0x3: d->u->rst.ptr = d->dat[port]; break;
+	case 0xe: system_inspect(d->u); break;
 	default: system_deo_special(d, port);
 	}
 }

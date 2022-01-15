@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 #include "../uxn.h"
 #include "screen.h"
 
@@ -21,24 +23,6 @@ static Uint8 blending[5][16] = {
 	{1, 2, 3, 1, 1, 2, 3, 1, 1, 2, 3, 1, 1, 2, 3, 1},
 	{2, 3, 1, 2, 2, 3, 1, 2, 2, 3, 1, 2, 2, 3, 1, 2},
 	{1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0}};
-
-static Uint8 font[][8] = {
-	{0x00, 0x7c, 0x82, 0x82, 0x82, 0x82, 0x82, 0x7c},
-	{0x00, 0x30, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10},
-	{0x00, 0x7c, 0x82, 0x02, 0x7c, 0x80, 0x80, 0xfe},
-	{0x00, 0x7c, 0x82, 0x02, 0x1c, 0x02, 0x82, 0x7c},
-	{0x00, 0x0c, 0x14, 0x24, 0x44, 0x84, 0xfe, 0x04},
-	{0x00, 0xfe, 0x80, 0x80, 0x7c, 0x02, 0x82, 0x7c},
-	{0x00, 0x7c, 0x82, 0x80, 0xfc, 0x82, 0x82, 0x7c},
-	{0x00, 0x7c, 0x82, 0x02, 0x1e, 0x02, 0x02, 0x02},
-	{0x00, 0x7c, 0x82, 0x82, 0x7c, 0x82, 0x82, 0x7c},
-	{0x00, 0x7c, 0x82, 0x82, 0x7e, 0x02, 0x82, 0x7c},
-	{0x00, 0x7c, 0x82, 0x02, 0x7e, 0x82, 0x82, 0x7e},
-	{0x00, 0xfc, 0x82, 0x82, 0xfc, 0x82, 0x82, 0xfc},
-	{0x00, 0x7c, 0x82, 0x80, 0x80, 0x80, 0x82, 0x7c},
-	{0x00, 0xfc, 0x82, 0x82, 0x82, 0x82, 0x82, 0xfc},
-	{0x00, 0x7c, 0x82, 0x80, 0xf0, 0x80, 0x82, 0x7c},
-	{0x00, 0x7c, 0x82, 0x80, 0xf0, 0x80, 0x80, 0x80}};
 
 static void
 screen_write(UxnScreen *p, Layer *layer, Uint16 x, Uint16 y, Uint8 color)
@@ -99,7 +83,6 @@ screen_resize(UxnScreen *p, Uint16 width, Uint16 height)
 	if(bg && fg && pixels) {
 		p->width = width;
 		p->height = height;
-		p->pixels = pixels;
 		screen_clear(p, &p->bg);
 		screen_clear(p, &p->fg);
 	}
@@ -126,35 +109,6 @@ screen_redraw(UxnScreen *p, Uint32 *pixels)
 	p->fg.changed = p->bg.changed = 0;
 }
 
-void
-screen_debug(UxnScreen *p, Uint8 *stack, Uint8 wptr, Uint8 rptr, Uint8 *memory)
-{
-	Uint8 i, x, y, b;
-	for(i = 0; i < 0x20; i++) {
-		x = ((i % 8) * 3 + 1) * 8, y = (i / 8 + 1) * 8, b = stack[i];
-		/* working stack */
-		screen_blit(p, &p->fg, x, y, font[(b >> 4) & 0xf], 1 + (wptr == i) * 0x7, 0, 0, 0);
-		screen_blit(p, &p->fg, x + 8, y, font[b & 0xf], 1 + (wptr == i) * 0x7, 0, 0, 0);
-		y = 0x28 + (i / 8 + 1) * 8;
-		b = memory[i];
-		/* return stack */
-		screen_blit(p, &p->fg, x, y, font[(b >> 4) & 0xf], 3, 0, 0, 0);
-		screen_blit(p, &p->fg, x + 8, y, font[b & 0xf], 3, 0, 0, 0);
-	}
-	/* return pointer */
-	screen_blit(p, &p->fg, 0x8, y + 0x10, font[(rptr >> 4) & 0xf], 0x2, 0, 0, 0);
-	screen_blit(p, &p->fg, 0x10, y + 0x10, font[rptr & 0xf], 0x2, 0, 0, 0);
-	/* guides */
-	for(x = 0; x < 0x10; x++) {
-		screen_write(p, &p->fg, x, p->height / 2, 2);
-		screen_write(p, &p->fg, p->width - x, p->height / 2, 2);
-		screen_write(p, &p->fg, p->width / 2, p->height - x, 2);
-		screen_write(p, &p->fg, p->width / 2, x, 2);
-		screen_write(p, &p->fg, p->width / 2 - 0x10 / 2 + x, p->height / 2, 2);
-		screen_write(p, &p->fg, p->width / 2, p->height / 2 - 0x10 / 2 + x, 2);
-	}
-}
-
 /* IO */
 
 Uint8
@@ -173,7 +127,6 @@ void
 screen_deo(Device *d, Uint8 port)
 {
 	switch(port) {
-	case 0x1: DEVPEEK16(d->vector, 0x0); break;
 	case 0x5:
 		if(!FIXED_SIZE) {
 			Uint16 w, h;
@@ -199,7 +152,7 @@ screen_deo(Device *d, Uint8 port)
 		DEVPEEK16(x, 0x8);
 		DEVPEEK16(y, 0xa);
 		DEVPEEK16(addr, 0xc);
-		screen_blit(&uxn_screen, layer, x, y, &d->mem[addr], d->dat[0xf] & 0xf, d->dat[0xf] & 0x10, d->dat[0xf] & 0x20, twobpp);
+		screen_blit(&uxn_screen, layer, x, y, &d->u->ram[addr], d->dat[0xf] & 0xf, d->dat[0xf] & 0x10, d->dat[0xf] & 0x20, twobpp);
 		if(d->dat[0x6] & 0x04) DEVPOKE16(0xc, addr + 8 + twobpp * 8); /* auto addr+length */
 		if(d->dat[0x6] & 0x01) DEVPOKE16(0x8, x + 8);                 /* auto x+8 */
 		if(d->dat[0x6] & 0x02) DEVPOKE16(0xa, y + 8);                 /* auto y+8 */

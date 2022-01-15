@@ -1,6 +1,6 @@
 #include <stdio.h>
-#include <unistd.h>
 #include <time.h>
+
 #include "uxn.h"
 
 #pragma GCC diagnostic push
@@ -42,7 +42,7 @@ static SDL_Rect gRect;
 
 /* devices */
 
-static Device *devsystem, *devscreen, *devmouse, *devctrl, *devaudio0, *devconsole;
+static Device *devscreen, *devmouse, *devctrl, *devaudio0;
 static Uint8 zoom = 1;
 static Uint32 stdin_event, audio0_event;
 
@@ -82,12 +82,19 @@ audio_finished_handler(UxnAudio *c)
 	SDL_PushEvent(&event);
 }
 
+int
+uxn_interrupt(Uxn *u)
+{
+	(void)u;
+	return 0;
+}
+
 static int
 stdin_handler(void *p)
 {
 	SDL_Event event;
 	event.type = stdin_event;
-	while(read(0, &event.cbutton.button, 1) > 0)
+	while(fread(&event.cbutton.button, 1, 1, stdin) > 0)
 		SDL_PushEvent(&event);
 	return 0;
 	(void)p;
@@ -180,10 +187,12 @@ system_deo_special(Device *d, Uint8 port)
 static void
 console_deo(Device *d, Uint8 port)
 {
-	if(port == 0x1)
-		DEVPEEK16(d->vector, 0x0);
-	if(port > 0x7)
-		write(port - 0x7, (char *)&d->dat[port], 1);
+	FILE *fd = port == 0x8 ? stdout : port == 0x9 ? stderr
+												  : 0;
+	if(fd) {
+		fputc(d->dat[port], fd);
+		fflush(fd);
+	}
 }
 
 static Uint8
@@ -209,7 +218,7 @@ audio_deo(Device *d, Uint8 port)
 		DEVPEEK16(adsr, 0x8);
 		DEVPEEK16(c->len, 0xa);
 		DEVPEEK16(addr, 0xc);
-		c->addr = &d->mem[addr];
+		c->addr = &d->u->ram[addr];
 		c->volume[0] = d->dat[0xe] >> 4;
 		c->volume[1] = d->dat[0xe] & 0xf;
 		c->repeat = !(d->dat[0xf] & 0x80);
@@ -228,7 +237,8 @@ nil_dei(Device *d, Uint8 port)
 static void
 nil_deo(Device *d, Uint8 port)
 {
-	if(port == 0x1) DEVPEEK16(d->vector, 0x0);
+	(void)d;
+	(void)port;
 }
 
 /* Boot */
@@ -239,7 +249,7 @@ load(Uxn *u, char *rom)
 	SDL_RWops *f;
 	int r;
 	if(!(f = SDL_RWFromFile(rom, "rb"))) return 0;
-	r = f->read(f, u->ram + PAGE_PROGRAM, 1, 0xffff - PAGE_PROGRAM);
+	r = f->read(f, u->ram + PAGE_PROGRAM, 1, 0x10000 - PAGE_PROGRAM);
 	f->close(f);
 	if(r < 1) return 0;
 	fprintf(stderr, "Loaded %s\n", rom);
@@ -247,25 +257,15 @@ load(Uxn *u, char *rom)
 	return 1;
 }
 
-static Uint8 *shadow, *memory;
-
 static int
 start(Uxn *u, char *rom)
 {
-	memory = (Uint8 *)calloc(0xffff, sizeof(Uint8));
-	shadow = (Uint8 *)calloc(0xffff, sizeof(Uint8));
-
-	if(!uxn_boot(&supervisor, shadow, shadow + VISOR_DEV, (Stack *)(shadow + VISOR_WST), (Stack *)(shadow + VISOR_RST)))
+	if(!uxn_boot(u, (Uint8 *)calloc(0x10000, sizeof(Uint8))))
 		return error("Boot", "Failed to start uxn.");
-	if(!uxn_boot(u, memory, shadow + PAGE_DEV, (Stack *)(shadow + PAGE_WST), (Stack *)(shadow + PAGE_RST)))
-		return error("Boot", "Failed to start uxn.");
-	if(!load(&supervisor, "supervisor.rom"))
-		error("Supervisor", "No debugger found.");
 	if(!load(u, rom))
 		return error("Boot", "Failed to load rom.");
-
-	/* system   */ devsystem = uxn_port(u, 0x0, system_dei, system_deo);
-	/* console  */ devconsole = uxn_port(u, 0x1, nil_dei, console_deo);
+	/* system   */ uxn_port(u, 0x0, system_dei, system_deo);
+	/* console  */ uxn_port(u, 0x1, nil_dei, console_deo);
 	/* screen   */ devscreen = uxn_port(u, 0x2, screen_dei, screen_deo);
 	/* audio0   */ devaudio0 = uxn_port(u, 0x3, audio_dei, audio_deo);
 	/* audio1   */ uxn_port(u, 0x4, audio_dei, audio_deo);
@@ -280,18 +280,8 @@ start(Uxn *u, char *rom)
 	/* unused   */ uxn_port(u, 0xd, nil_dei, nil_deo);
 	/* unused   */ uxn_port(u, 0xe, nil_dei, nil_deo);
 	/* unused   */ uxn_port(u, 0xf, nil_dei, nil_deo);
-
-	/* Supervisor */
-	uxn_port(&supervisor, 0x0, system_dei, system_deo);
-	uxn_port(&supervisor, 0x1, nil_dei, console_deo);
-	uxn_port(&supervisor, 0x2, screen_dei, screen_deo);
-	uxn_port(&supervisor, 0x8, nil_dei, nil_deo);
-
-	uxn_eval(&supervisor, PAGE_PROGRAM);
-
 	if(!uxn_eval(u, PAGE_PROGRAM))
 		return error("Boot", "Failed to start rom.");
-
 	return 1;
 }
 
@@ -300,13 +290,6 @@ set_zoom(Uint8 scale)
 {
 	zoom = clamp(scale, 1, 3);
 	set_window_size(gWindow, (uxn_screen.width + PAD * 2) * zoom, (uxn_screen.height + PAD * 2) * zoom);
-}
-
-static void
-toggle_debugger(void)
-{
-	devsystem->dat[0xe] = !devsystem->dat[0xe];
-	screen_clear(&uxn_screen, &uxn_screen.fg);
 }
 
 static void
@@ -330,7 +313,7 @@ static void
 restart(Uxn *u)
 {
 	set_size(WIDTH, HEIGHT, 1);
-	start(u, "boot.rom");
+	start(u, "launcher.rom");
 }
 
 static Uint8
@@ -345,22 +328,6 @@ get_button(SDL_Event *event)
 	case SDLK_DOWN: return 0x20;
 	case SDLK_LEFT: return 0x40;
 	case SDLK_RIGHT: return 0x80;
-	}
-	return 0x00;
-}
-
-static Uint8
-get_fkey(SDL_Event *event)
-{
-	switch(event->key.keysym.sym) {
-	case SDLK_F1: return 0x01;
-	case SDLK_F2: return 0x02;
-	case SDLK_F3: return 0x04;
-	case SDLK_F4: return 0x08;
-	case SDLK_F5: return 0x10;
-	case SDLK_F6: return 0x20;
-	case SDLK_F7: return 0x40;
-	case SDLK_F8: return 0x80;
 	}
 	return 0x00;
 }
@@ -398,7 +365,7 @@ do_shortcut(Uxn *u, SDL_Event *event)
 	if(event->key.keysym.sym == SDLK_F1)
 		set_zoom(zoom > 2 ? 1 : zoom + 1);
 	else if(event->key.keysym.sym == SDLK_F2)
-		toggle_debugger();
+		system_inspect(u);
 	else if(event->key.keysym.sym == SDLK_F3)
 		capture_screen();
 	else if(event->key.keysym.sym == SDLK_F4)
@@ -408,15 +375,17 @@ do_shortcut(Uxn *u, SDL_Event *event)
 static int
 console_input(Uxn *u, char c)
 {
-	devconsole->dat[0x2] = c;
-	return uxn_eval(u, devconsole->vector);
+	Device *d = &u->dev[1];
+	d->dat[0x2] = c;
+	return uxn_eval(u, GETVECTOR(d));
 }
 
 static int
 run(Uxn *u)
 {
+	Device *devsys = &u->dev[0];
 	redraw();
-	while(!devsystem->dat[0xf]) {
+	while(!devsys->dat[0xf]) {
 		SDL_Event event;
 		double elapsed, begin;
 		if(!BENCH)
@@ -435,9 +404,7 @@ run(Uxn *u)
 			/* Audio */
 			else if(event.type >= audio0_event && event.type < audio0_event + POLYPHONY) {
 				Device *d = devaudio0 + (event.type - audio0_event);
-				Uint16 res;
-				DEVPEEK16(res, 0x00);
-				uxn_eval(u, res);
+				uxn_eval(u, GETVECTOR(d));
 			}
 			/* Mouse */
 			else if(event.type == SDL_MOUSEMOTION)
@@ -459,8 +426,6 @@ run(Uxn *u)
 					controller_key(devctrl, get_key(&event));
 				else if(get_button(&event))
 					controller_down(devctrl, get_button(&event));
-				/* else if(get_fkey(&event))
-					controller_special(&supervisor.dev[0x8], get_fkey(&event)); */
 				else
 					do_shortcut(u, &event);
 				ksym = event.key.keysym.sym;
@@ -482,10 +447,8 @@ run(Uxn *u)
 			else if(event.type == stdin_event)
 				console_input(u, event.cbutton.button);
 		}
-		if(devsystem->dat[0xe])
-			uxn_eval(&supervisor, supervisor.dev[2].vector);
-		uxn_eval(u, devscreen->vector);
-		if(uxn_screen.fg.changed || uxn_screen.bg.changed || devsystem->dat[0xe])
+		uxn_eval(u, GETVECTOR(devscreen));
+		if(uxn_screen.fg.changed || uxn_screen.bg.changed)
 			redraw();
 		if(!BENCH) {
 			elapsed = (SDL_GetPerformanceCounter() - begin) / (double)SDL_GetPerformanceFrequency() * 1000.0f;
@@ -526,7 +489,7 @@ main(int argc, char **argv)
 			console_input(&u, '\n');
 		}
 	}
-	if(!loaded && !start(&u, "boot.rom"))
+	if(!loaded && !start(&u, "launcher.rom"))
 		return error("usage", "uxnemu [-s scale] file.rom");
 	run(&u);
 	SDL_Quit();

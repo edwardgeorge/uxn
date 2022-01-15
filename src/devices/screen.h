@@ -1,5 +1,3 @@
-#include <stdlib.h>
-
 /*
 Copyright (c) 2021 Devine Lu Linvega
 Copyright (c) 2021 Andrew Alderwick
@@ -15,8 +13,7 @@ WITH REGARD TO THIS SOFTWARE.
 #define FIXED_SIZE 0
 
 typedef struct Layer {
-	Uint8 *pixels;
-	Uint8 changed;
+	Uint8 *pixels, changed;
 } Layer;
 
 typedef struct UxnScreen {

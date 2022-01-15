@@ -27,6 +27,7 @@ typedef unsigned int Uint32;
 
 #define DEVPEEK16(o, x) { (o) = (d->dat[(x)] << 8) + d->dat[(x) + 1]; }
 #define DEVPOKE16(x, y) { d->dat[(x)] = (y) >> 8; d->dat[(x) + 1] = (y); }
+#define GETVECTOR(d) ((d)->dat[0] << 8 | (d)->dat[1])
 
 /* clang-format on */
 
@@ -36,19 +37,19 @@ typedef struct {
 
 typedef struct Device {
 	struct Uxn *u;
-	Uint8 *dat, *mem;
-	Uint16 vector;
+	Uint8 dat[16];
 	Uint8 (*dei)(struct Device *d, Uint8);
 	void (*deo)(struct Device *d, Uint8);
 } Device;
 
 typedef struct Uxn {
-	Uint8 *ram, *devpage;
-	Stack *wst, *rst;
+	Uint8 *ram;
+	Stack wst, rst;
 	Device dev[16];
 } Uxn;
 
-int uxn_boot(Uxn *u, Uint8 *ram, Uint8 *devpage, Stack *wst, Stack *rst);
+int uxn_boot(Uxn *u, Uint8 *ram);
 int uxn_eval(Uxn *u, Uint16 pc);
 int uxn_halt(Uxn *u, Uint8 error, Uint16 addr);
+int uxn_interrupt(Uxn *u);
 Device *uxn_port(Uxn *u, Uint8 id, Uint8 (*deifn)(Device *, Uint8), void (*deofn)(Device *, Uint8));

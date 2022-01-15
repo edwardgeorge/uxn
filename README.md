@@ -30,7 +30,7 @@ Build the assembler and emulator by running the `build.sh` script. The assembler
 If you wish to build the emulator without graphics mode:
 
 ```sh
-cc src/devices/file.c src/uxn.c -DNDEBUG -Os -g0 -s src/uxncli.c -o bin/uxncli
+cc src/devices/datetime.c src/devices/system.c src/devices/file.c src/uxn.c -DNDEBUG -Os -g0 -s src/uxncli.c -o bin/uxncli
 ```
 
 ### Plan 9 
@@ -94,7 +94,7 @@ uxnemu orca.rom | shim
 - `F1` toggle zoom
 - `F2` toggle debug
 - `F3` capture screen
-- `F4` load boot.rom
+- `F4` load launcher.rom
 
 ### Buttons
 
@@ -105,7 +105,14 @@ uxnemu orca.rom | shim
 
 ## Need a hand?
 
-Find us in [`#uxn` on irc.esper.net](ircs://irc.esper.net:6697/#uxn).
+The following resources are a good place to start:
+
+* [XXIIVV — uxntal](https://wiki.xxiivv.com/site/uxntal.html)
+* [XXIIVV — uxntal cheatsheet](https://wiki.xxiivv.com/site/uxntal_cheatsheet.html)
+* [XXIIVV — uxntal reference](https://wiki.xxiivv.com/site/uxntal_reference.html)
+* [compudanzas — uxn tutorial](https://compudanzas.net/uxn_tutorial.html)
+
+You can also find us in [`#uxn` on irc.esper.net](ircs://irc.esper.net:6697/#uxn).
 
 ## Contributing
 

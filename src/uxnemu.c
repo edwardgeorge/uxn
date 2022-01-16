@@ -6,11 +6,7 @@
 
 #ifdef __ANDROID__
 #include <android/log.h>
-#undef stdout
-#undef stderr
-#define stdout ANDROID_LOG_VERBOSE
-#define stderr ANDROID_LOG_VERBOSE
-#define fprintf(f, ...) __android_log_print(f, "Uxn", __VA_ARGS__)
+#define fprintf(f, ...) __android_log_print(ANDROID_LOG_VERBOSE, "Uxn", __VA_ARGS__)
 #endif
 
 #pragma GCC diagnostic push

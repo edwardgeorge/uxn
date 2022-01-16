@@ -53,7 +53,9 @@ static SDL_Renderer *gRenderer;
 static SDL_AudioDeviceID audio_id;
 static SDL_Rect gRect;
 static SDL_Point gScrSize;
+#ifdef __ANDROID__
 static SDL_Rect gScrDst;
+#endif
 
 /* devices */
 

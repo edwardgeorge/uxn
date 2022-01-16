@@ -4,10 +4,13 @@ This is a working port of Uxn to run on Android.
 
 ## Guide
 
-To get a proper on-screen keyboard, install "Hacker's Keyboard"
-from Google Play. Use it naturally, as you would use a physical keyboard,
+To get a proper on-screen keyboard, install
+[Hacker's Keyboard](https://play.google.com/store/apps/details?id=org.pocketworkstation.pckeyboard).
+Use it naturally, as you would use a physical keyboard,
 including pressing and holding modifiers (Ctrl, Alt, etc) with letters
 if a ROM requires it (like Noodle, to load or save an image).
+
+Another alternative keyboard is [Multiling O](https://play.google.com/store/apps/details?id=kl.ime.oh).
 
 Tapping anywhere outside of ROM screen area will toggle the keyboard.
 

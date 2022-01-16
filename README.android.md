@@ -31,13 +31,8 @@ Make sure environment is properly configured:
 
 You should be able to build now:
 
-	; cd uxn; ./build --no-run                 # need boot.rom to be included
-
-	; cd src/android; ./gradlew assembleDebug # now the APK
-	............
-	BUILD SUCCESSFUL in 111s
-	31 actionable tasks: 3 executed, 28 up-to-date
-
+	; ./prepare-android.sh
+	; cd src/android; ./gradlew assembleDebug
 	; find app -name *.apk
 	app/build/outputs/apk/debug/app-debug.apk
 

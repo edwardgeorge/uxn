@@ -176,13 +176,23 @@ redraw(void)
 #ifdef __ANDROID__
 	gScrDst.x = 0;
 	gScrDst.y = 0;
-	if(gScrSize.y > gScrSize.x) { /* portrait */
+	if(gScrSize.y > gScrSize.x) {
+		/* Portrait - stick to top of screen and use full width.
+		 * Ideally we should letterbox in all cases; this is a
+		 * workaround because SDL doesn't tell us the keyboard height. */
 		gScrDst.w = gScrSize.x;
 		gScrDst.h = gScrSize.x * uxn_screen.height / uxn_screen.width;
-	} else { /* landscape */
-		gScrDst.h = gScrSize.y;
+	} else {
+		/* Landscape - do proper letterboxing */
 		gScrDst.w = gScrSize.y * uxn_screen.width / uxn_screen.height;
-		gScrDst.x = (gScrSize.x - gScrDst.w) / 2;
+		if(gScrDst.w <= gScrSize.x) {
+			gScrDst.h = gScrSize.y;
+			gScrDst.x = (gScrSize.x - gScrDst.w) / 2;
+		} else {
+			gScrDst.w = gScrSize.x;
+			gScrDst.h = gScrSize.x * uxn_screen.height / uxn_screen.width;
+			gScrDst.y = (gScrSize.y - gScrDst.h) / 2;
+		}
 	}
 	SDL_RenderCopy(gRenderer, gTexture, NULL, &gScrDst);
 #else

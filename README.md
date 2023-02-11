@@ -4,7 +4,7 @@ An assembler and emulator for the [Uxn stack-machine](https://wiki.xxiivv.com/si
 
 ## Download binaries
 
-Binaries are available for 64-bit x86 computers running [Linux](https://rabbits.srht.site/uxn-linux-amd64.tar.gz), [Windows](https://rabbits.srht.site/uxn-windows-64bit.zip) and [macOS](https://rabbits.srht.site/uxn-macos.tar.gz).
+Binaries are available for 64-bit x86 computers running [Linux](https://rabbits.srht.site/uxn/uxn-essentials-lin64.tar.gz), [Windows](https://rabbits.srht.site/uxn/uxn-essentials-win64.zip) and [macOS](https://rabbits.srht.site/uxn/uxn-essentials-mac64.tar.gz).
 
 ## Build
 
@@ -25,6 +25,7 @@ Build the assembler and emulator by running the `build.sh` script. The assembler
 ./build.sh 
 	--debug # Add debug flags to compiler
 	--format # Format source code
+	--install # Copy to ~/bin
 ```
 
 If you wish to build the emulator without graphics mode:
@@ -108,11 +109,9 @@ uxnemu orca.rom | shim
 The following resources are a good place to start:
 
 * [XXIIVV — uxntal](https://wiki.xxiivv.com/site/uxntal.html)
-* [XXIIVV — uxntal cheatsheet](https://wiki.xxiivv.com/site/uxntal_cheatsheet.html)
 * [XXIIVV — uxntal reference](https://wiki.xxiivv.com/site/uxntal_reference.html)
 * [compudanzas — uxn tutorial](https://compudanzas.net/uxn_tutorial.html)
-
-You can also find us in [`#uxn` on irc.esper.net](ircs://irc.esper.net:6697/#uxn).
+* [Fediverse — #uxn tag](https://merveilles.town/tags/uxn)
 
 ## Contributing
 

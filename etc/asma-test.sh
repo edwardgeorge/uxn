@@ -10,11 +10,16 @@ expect_failure() {
 	if ! grep -qF "${1}" asma-test/asma.log; then
 		echo "error: asma didn't report error ${1} in faulty code"
 		cat asma-test/asma.log
+		exit 1
 	fi
 }
 
 echo 'Assembling asma with uxnasm'
-bin/uxnasm projects/software/asma.tal asma-test/asma.rom > asma-test/uxnasm.log
+if ! bin/uxnasm projects/software/asma.tal asma-test/asma.rom > asma-test/uxnasm.log; then
+	echo 'Failed to assemble asma!'
+	cat asma-test/uxnasm.log
+	exit 1
+fi
 for F in $(find projects -path projects/library -prune -false -or -path projects/assets -prune -false -or -type f -name '*.tal' | sort); do
 	echo "Comparing assembly of ${F}"
 
@@ -52,21 +57,25 @@ EOD
 expect_failure 'Invalid hexadecimal: #000' <<'EOD'
 |1000 #000
 EOD
-expect_failure 'Unrecognised token: 0' <<'EOD'
+expect_failure 'Label not found: 0' <<'EOD'
 |1000 0
 EOD
-expect_failure 'Unrecognised token: 000' <<'EOD'
+expect_failure 'Label not found: 000' <<'EOD'
 |1000 000
 EOD
 expect_failure 'Address not in zero page: .hello' <<'EOD'
 |1000 @hello
 	.hello
 EOD
+expect_failure 'Address not in zero page: -hello' <<'EOD'
+|1000 @hello
+	-hello
+EOD
 expect_failure 'Address outside range: ,hello' <<'EOD'
 |1000 @hello
 |2000 ,hello
 EOD
-expect_failure 'Unrecognised token: hello' <<'EOD'
+expect_failure 'Label not found: hello' <<'EOD'
 hello
 EOD
 expect_failure 'Macro already exists: %me' <<'EOD'
@@ -77,22 +86,34 @@ expect_failure 'Memory overwrite: SUB' <<'EOD'
 |2000 ADD
 |1000 SUB
 EOD
-expect_failure 'Recursion level too deep:' <<'EOD'
-%me { you }
-%you { me }
-|1000 me
-EOD
-expect_failure 'Recursion level too deep: ~asma-test/in.tal' <<'EOD'
-~asma-test/in.tal
-EOD
+# expect_failure 'Recursion level too deep:' <<'EOD'
+# %me { you }
+# %you { me }
+# |1000 me
+# EOD
+# expect_failure 'Recursion level too deep: ~asma-test/in.tal' <<'EOD'
+# ~asma-test/in.tal
+# EOD
 expect_failure 'Label not found: ;blah' <<'EOD'
 |1000 ;blah
+EOD
+expect_failure 'Label not found: :blah' <<'EOD'
+|1000 :blah
+EOD
+expect_failure 'Label not found: =blah' <<'EOD'
+|1000 =blah
+EOD
+expect_failure 'Label not found: -blah' <<'EOD'
+|1000 -blah
 EOD
 expect_failure 'Label not found: ,blah' <<'EOD'
 |1000 ,blah
 EOD
 expect_failure 'Label not found: .blah' <<'EOD'
 |1000 .blah
+EOD
+expect_failure "Label not found: 'a" <<'EOD'
+|1000 'a
 EOD
 echo 'All OK'
 

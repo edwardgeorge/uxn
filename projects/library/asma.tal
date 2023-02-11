@@ -12,12 +12,6 @@
 )
 
 (
-	Common macros for use later on.
-)
-
-%asma-IF-ERROR { ;asma/error LDA2 ORA }
-
-(
 	Asma's public interface.
 	These routines are what are expected to be called from programs that bundle
 	Asma into bigger projects.
@@ -32,7 +26,7 @@
 	;asma-init-first-pass JSR2
 	;asma-flush-ignore ;asma/flush-fn STA2
 	;asma/src-filename LDA2 ;asma-assemble-file-pass JSR2
-	asma-IF-ERROR ,&error JCN
+	;asma/error LDA2 ORA ,&error JCN
 
 	;asma-init-next-pass JSR2
 	;asma-flush-to-file ;asma/flush-fn STA2
@@ -40,7 +34,7 @@
 	;asma-flush-to-console ;asma/flush-fn STA2
 	&filename-present
 	;asma/src-filename LDA2 ;asma-assemble-file-pass JSR2
-	asma-IF-ERROR ,&error JCN
+	;asma/error LDA2 ORA ,&error JCN
 
 	( flush output buffer )
 	;asma-output/ptr LDA2 ;asma-write-buffer SUB2 ;asma/flush-fn LDA2 JSR2
@@ -137,8 +131,8 @@
 	DUP2 ,asma-print-labels JSR
 	( here )
 	DUP2 #0004 ADD2
-	LDAk LIT 'A LTH ,&loop JCN
-	LDAk LIT 'Z GTH ,&loop JCN
+	LDAk LIT "A LTH ,&loop JCN
+	LDAk LIT "Z GTH ,&loop JCN
 	POP2
 	,&skip-device-label JMP
 	&loop
@@ -169,8 +163,8 @@
 	,asma-print-string JMP
 
 @asma-print-short ( short* -- )
-	LIT '0 .Console/error DEO
-	LIT 'x .Console/error DEO
+	LIT "0 .Console/error DEO
+	LIT "x .Console/error DEO
 	OVR #04 SFT ,&hex JSR
 	SWP #0f AND ,&hex JSR
 	DUP #04 SFT ,&hex JSR
@@ -202,15 +196,18 @@
 @asma-init-next-pass ( -- )
 	;asma/pass LDA INC ;asma/pass STA
 	;asma-write-buffer ;asma-output/ptr STA2
-	#0000 DUP2
-		;asma/addr STA2
+	#0100 DUP2 DUP ( 0100 0100 00 )
 		;asma/state STA
-	#01 SWP ( 0100 ) ;asma/written-addr STA2
+		;asma/addr STA2
+		;asma/written-addr STA2
 	;&preamble-end ;&preamble SUB2k ;asma-assemble-chunk JSR2 POP2 POP2
 	JMP2r
 
 	&preamble
-	"%BRK 20 '{ 20 "00 20 '} 20
+	"%BRK 20 "{ 20 "00 20 "} 20
+	"%[ 20 "{ 20 "} 20
+	"%] 20 "{ 20 "} 20
+	"@on-reset 20
 	&preamble-end
 
 (
@@ -222,9 +219,8 @@
 	;asma-read-buffer DUP2 ;asma-read-buffer/end ROT2 SUB2 ( func* line^ filename* buf* size^ )
 	ROT2 ( func* line^ buf* size^ filename* )
 	,file-read-chunks JSR
-	;asma-flush-lit JSR2
 
-	asma-IF-ERROR ,&error JCN
+	;asma/error LDA2 ORA ,&error JCN
 
 	&error
 	POP2 POP2 POP2 POP2 POP2
@@ -316,7 +312,7 @@
 	LDAk #0a NEQ ( end-chunk* ws-char* not-newline / line^ start-of-token* )
 	#00 OVR2 STA
 	STH2r ,asma-assemble-token JSR ( end-chunk* ws-char* not-newline / line^ )
-	asma-IF-ERROR ,&error JCN
+	;asma/error LDA2 ORA ,&error JCN
 	,&not-newline JCN
 	,asma/lines LDR2 INC2 ,asma/lines STR2
 	&not-newline ( end-chunk* ws-char* / line^ )
@@ -348,7 +344,7 @@
 @asma [
 	&pass $1 &state $1 &line $2 &lines $2 &break $1 &eof $1
 	&comment-level $1
-	&token $2 &orig-token $2 &lit $1 &lit-present $1
+	&token $2 &orig-token $2
 	&addr $2 &written-addr $2 &flush-fn $2
 	&src-filename $2 &dest-filename $2
 	&error $2 &log-level $1
@@ -360,9 +356,9 @@
 	asma/state contains several meaningful bits:
 	0x02 we are in a comment,
 	0x04 we are in a macro body,
-	0x10 we are in a macro body that we are ignoring
+	0x08 we are in a macro body that we are ignoring
 	   (because the macro was already defined in a previous pass).
-	Since 0x10 never appears without 0x04, the lowest bit set in asma/state is
+	Since 0x08 never appears without 0x04, the lowest bit set in asma/state is
 	always 0x00, 0x02, or 0x04, which is very handy for use with jump tables.
 	The lowest bit set can be found easily by #00 (n) SUBk AND.
 )
@@ -447,7 +443,7 @@
 	,asma-parse-hex-digit JSR
 	DUP #f0 AND ,&fail JCN
 	LITr 40 SFT2r
-	#00 STH STH ADD2r
+	LITr 00 STH ADD2r
 	INC2
 	,&loop JMP
 
@@ -493,15 +489,15 @@
 	JMP2r
 
 	&not-end
-	DUP LIT '2 NEQ ,&not-two JCN
+	DUP LIT "2 NEQ ,&not-two JCN
 	POP LIT &short-flag $1 ORA ,&loop JMP
 
 	&not-two
-	DUP LIT 'r NEQ ,&not-return JCN
+	DUP LIT "r NEQ ,&not-return JCN
 	POP LIT &return-flag $1 ORA ,&loop JMP
 
 	&not-return
-	LIT 'k NEQ ,&not-keep JCN
+	LIT "k NEQ ,&not-keep JCN
 	&set-keep LIT &keep-flag $1 ORA ,&loop JMP
 
 	&not-keep ( 00 byte / end* )
@@ -511,37 +507,23 @@
 	POP2 #01
 	JMP2r
 
+@asma-write-lit ( byte -- )
+	LIT LIT ,asma-write-byte JSR
+	,asma-write-byte JSR
+	JMP2r
+
+@asma-advance-addr ( delta* -- )
+	;asma/addr LDA2k ( delta* ptr* value* )
+	ROT2 ADD2 ( ptr* new-value* )
+	SWP2 STA2
+	JMP2r
+
 @asma-write-short ( short -- )
 	SWP
 	,asma-write-byte JSR
-	,asma-write-byte JMP ( tail call )
-
-@asma-write-lit ( byte -- )
-	;asma/lit LDA2 ,&present JCN
-	POP #01 ;asma/lit STA2
-	;asma/addr LDA2k INC2 INC2 SWP2 STA2
-	JMP2r
-	&present
-	;asma/addr LDA2k #0002 SUB2 SWP2 STA2
-	LIT LIT2 ,asma-write-byte/raw JSR
-	,asma-write-byte/raw JSR
-	,asma-write-byte/raw JSR
-	#0000 ;asma/lit STA2
-	JMP2r
-
-@asma-flush-lit ( -- )
-	;asma/lit LDA2 ,&present JCN
-	POP JMP2r
-	&present
-	;asma/addr LDA2k #0002 SUB2 SWP2 STA2
-	LIT LIT ,asma-write-byte/raw JSR
-	,asma-write-byte/raw JSR
-	#0000 ;asma/lit STA2
-	JMP2r
+	( fall through )
 
 @asma-write-byte ( byte -- )
-	,asma-flush-lit JSR
-	&raw
 	;asma/addr LDA2 ;asma/written-addr LDA2
 	LTH2k ,&rewound JCN
 	&loop
@@ -608,14 +590,11 @@
 	-body routines) tokens that fail to match any first letter in their tree.
 )
 
-%asma-STATE-SET { ;asma/state LDA ORA ;asma/state STA }
-%asma-STATE-CLEAR { #ff EOR ;asma/state LDA AND ;asma/state STA }
-
 @asma-comment-more
 	;asma/token LDA2 ;strlen JSR2 ORA ,asma-ignore JCN
 @asma-comment-start
 	;asma/comment-level LDAk INC ROT ROT STA
-	#02 asma-STATE-SET
+	;asma/state LDA #02 ORA ;asma/state STA
 @asma-ignore
 	JMP2r
 
@@ -623,7 +602,7 @@
 	;asma/token LDA2 ;strlen JSR2 ORA ,asma-ignore JCN
 	;asma/comment-level LDAk #01 SUB DUP SWP2 STA ,asma-ignore JCN
 @asma-comment-end
-	#02 asma-STATE-CLEAR
+	;asma/state LDA #0c AND ;asma/state STA
 	JMP2r
 
 @asma-macro-define
@@ -640,26 +619,25 @@
 	#0000 ;append-heap-short JSR2 ( less-than pointer )
 	#0000 ;append-heap-short JSR2 ( greater-than pointer )
 	;asma/token LDA2 ;append-heap-string JSR2 ( key )
-	#04 asma-STATE-SET
+	;asma/state LDA #04 ORA ;asma/state STA
 	JMP2r
 
 	&ignore-macro
-	#14 asma-STATE-SET
+	;asma/state LDA #0c ORA ;asma/state STA
 	JMP2r
 
 @asma-macro-body
-	;asma/state LDA #10 AND ,&skip JCN
+	;asma/state LDA #08 AND ,&skip JCN
 	;asma/token LDA2 ;append-heap-string JSR2
 	&skip
 	JMP2r
 
 @asma-macro-end
 	#00 ;append-heap-byte JSR2
-	#14 asma-STATE-CLEAR
+	;asma/state LDA #02 AND ;asma/state STA
 	JMP2r
 
 @asma-label-define
-	;asma-flush-lit JSR2
 	;asma-trees/labels ,asma-label-helper JSR
 	,&already-existed JCN
 
@@ -670,7 +648,6 @@
 	JMP2r
 
 @asma-sublabel-define
-	;asma-flush-lit JSR2
 	;asma-trees/scope LDA2 ,asma-label-helper JSR
 	POP POP2
 	JMP2r
@@ -700,29 +677,18 @@
 	#00 JMP2r
 
 @asma-pad-absolute
-	;asma-flush-lit JSR2
-	#0000 ,asma-pad-helper JMP
-
-@asma-pad-relative
-	;asma-flush-lit JSR2
-	;asma/addr LDA2
+	#0000 ;asma/addr STA2
 	( fall through )
 
-@asma-pad-helper ( offset* -- )
+@asma-pad-relative
 	#00 ;asma-parse-hex-string JSR2
 	,&valid JCN
 
 	;asma-msg-hex ;asma/error STA2
-	POP2
 	JMP2r
 
 	&valid
-	ADD2 ;asma/addr STA2
-	JMP2r
-
-@asma-raw-char
-	;asma/token LDA2 LDA
-	;asma-write-byte JMP2 ( tail call )
+	;asma-advance-addr JMP2 ( tail call )
 
 @asma-raw-word
 	;asma/token LDA2
@@ -748,8 +714,12 @@
 	;asma-write-short JMP2 ( tail call )
 
 @asma-literal-zero-addr
+	LIT LIT ;asma-write-byte JSR2
+	( fall through )
+
+@asma-zero-addr
 	,asma-addr-helper JSR
-	;asma-write-lit JSR2
+	;asma-write-byte JSR2
 
 	,&not-zero-page JCN
 	JMP2r
@@ -762,10 +732,28 @@
 	&ignore-error
 	JMP2r
 
-@asma-literal-rel-addr
+@asma-jci
+	#20 ,asma-jxi JMP ( tail call )
+
+@asma-jmi
+	#40
+	( fall through )
+
+@asma-jxi
+	;asma-write-byte JSR2
 	,asma-addr-helper JSR
 	;asma/addr LDA2 SUB2
-	#0003 ;asma/lit-present LDA SUB SUB2
+	#0002 SUB2
+	;asma-write-short JMP2 ( tail call )
+
+@asma-literal-rel-addr
+	LIT LIT ;asma-write-byte JSR2
+	( fall through )
+
+@asma-rel-addr
+	,asma-addr-helper JSR
+	;asma/addr LDA2 SUB2
+	#0002 SUB2
 
 	DUP2 #0080 LTH2 STH
 	DUP2 #ff7f GTH2 STHr ORA ,&in-bounds JCN
@@ -775,7 +763,7 @@
 	JMP2r
 
 	&in-bounds
-	;asma-write-lit JSR2
+	;asma-write-byte JSR2
 	POP
 	JMP2r
 
@@ -859,7 +847,6 @@
 	( hex short   ) ,asma-short-helper/raw JMP
 
 	&not-hex
-	.System/rst DEI #e0 GTH ,&too-deep JCN
 	;asma-trees/macros ;asma-traverse-tree JSR2 ,&not-macro JCN
 
 	&macro-loop
@@ -869,7 +856,7 @@
 
 	&keep-going
 	DUP2k ;strlen JSR2 INC2 ADD2
-	SWP2 ;asma-assemble-token JSR2 asma-IF-ERROR ,&macro-error JCN
+	SWP2 ;asma-assemble-token JSR2 ;asma/error LDA2 ORA ,&macro-error JCN
 	,&macro-loop JMP
 
 	&macro-error
@@ -878,15 +865,9 @@
 
 	&not-macro
 	POP2
-	;asma-msg-token ;asma/error STA2
-	JMP2r
-
-	&too-deep
-	;asma-msg-too-deep ;asma/error STA2
-	JMP2r
+	#60 ;asma-jxi JMP2 ( tail call )
 
 @asma-include
-	.System/rst DEI #e0 GTH ,asma-normal-body/too-deep JCN
 	;heap LDA2
 		;asma/token LDA2 ;append-heap-string JSR2
 		;asma-assemble-file-pass JSR2
@@ -899,10 +880,8 @@
 @asma-msg-zero-page "Address 20 "not 20 "in 20 "zero 20 "page 00
 @asma-msg-relative  "Address 20 "outside 20 "range 00
 @asma-msg-label     "Label 20 "not 20 "found 00
-@asma-msg-token     "Unrecognised 20 "token 00
 @asma-msg-macro     "Macro 20 "already 20 "exists 00
 @asma-msg-rewound   "Memory 20 "overwrite 00
-@asma-msg-too-deep  "Recursion 20 "level 20 "too 20 "deep 00
 @asma-msg-redefined "Label 20 "redefined 00
 
 ( trees )
@@ -915,45 +894,47 @@
 	            than       than         string         data )
 
 @asma-first-char-comment
-	&28          $2         $2          '( 00          :asma-comment-more
-	&_entry     :&28        $2          ') 00          :asma-comment-less
+	&28          $2         $2          "( 00          :asma-comment-more
+	&_entry     :&28        $2          ") 00          :asma-comment-less
 
 @asma-first-char-macro
-	&28          $2         $2          '( 00          :asma-comment-start
-	&29         :&28        $2          ') 00          :asma-comment-end
-	&_entry     :&29       :&7d         '{ 00          :asma-ignore
-	&7d          $2         $2          '} 00          :asma-macro-end
+	&28          $2         $2          "( 00          :asma-comment-start
+	&29         :&28        $2          ") 00          :asma-comment-end
+	&_entry     :&29       :&7d         "{ 00          :asma-ignore
+	&7d          $2         $2          "} 00          :asma-macro-end
 
 @asma-first-char-normal
-	&22          $2         $2          '" 00          :asma-raw-word
-	&23         :&22        $2          '# 00          :asma-literal-hex
-	&24         :&23       :&25         '$ 00          :asma-pad-relative
-	&25          $2         $2          '% 00          :asma-macro-define
-	&26         :&24       :&29         26 00 ( & )    :asma-sublabel-define
-	&27          $2         $2          '' 00          :asma-raw-char
-	&28         :&27        $2          '( 00          :asma-comment-start
-	&29         :&28       :&2c         ') 00          :asma-comment-end
-	&2c          $2         $2          ', 00          :asma-literal-rel-addr
-	&_entry     :&26       :&5d         '. 00          :asma-literal-zero-addr
-	&3a          $2         $2          ': 00          :asma-abs-addr
-	&3b         :&3a        $2          '; 00          :asma-literal-abs-addr
-	&40         :&3b       :&5b         '@ 00          :asma-label-define
-	&5b          $2         $2          '[ 00          :asma-ignore
-	&5d         :&40       :&7d         '] 00          :asma-ignore
-	&7b          $2         $2          '{ 00          :asma-ignore
-	&7c         :&7b        $2          '| 00          :asma-pad-absolute
-	&7d         :&7c       :&7e         '} 00          :asma-ignore
-	&7e          $2         $2          '~ 00          :asma-include
+	&21          $2         $2          "! 00          :asma-jmi
+	&22         :&21        $2          "" 00          :asma-raw-word
+	&23         :&22       :&25         "# 00          :asma-literal-hex
+	&24          $2         $2          "$ 00          :asma-pad-relative
+	&25         :&24        $2          "% 00          :asma-macro-define
+	&26         :&23       :&2c         26 00 ( & )    :asma-sublabel-define
+	&28          $2         $2          "( 00          :asma-comment-start
+	&29         :&28        $2          ") 00          :asma-comment-end
+	&2c         :&29       :&2d         ", 00          :asma-literal-rel-addr
+	&2d          $2         $2          "- 00          :asma-zero-addr
+	&_entry     :&26       :&5f         ". 00          :asma-literal-zero-addr
+	&3a          $2         $2          ": 00          :asma-abs-addr
+	&3b         :&3a        $2          "; 00          :asma-literal-abs-addr
+	&3d         :&3b       :&40         "= 00          :asma-abs-addr
+	&3f          $2         $2          "? 00          :asma-jci
+	&40         :&3f        $2          "@ 00          :asma-label-define
+	&5f         :&3d       :&7d         "_ 00          :asma-rel-addr
+	&7b          $2         $2          "{ 00          :asma-ignore
+	&7c         :&7b        $2          "| 00          :asma-pad-absolute
+	&7d         :&7c       :&7e         "} 00          :asma-ignore
+	&7e          $2         $2          "~ 00          :asma-include
 
 @asma-opcodes
 	&_entry     :&GTH      :&ROT &_disasm "LIT 00
 	&INC         $2         $2          "INC 00
 	&POP         $2         $2          "POP 00
-	&DUP         $2         $2          "DUP 00
 	&NIP        :&MUL      :&OVR        "NIP 00
 	&SWP         $2         $2          "SWP 00
-	&OVR        :&ORA      :&POP        "OVR 00
 	&ROT        :&NIP      :&STR        "ROT 00
+	&DUP         $2         $2          "DUP 00
+	&OVR        :&ORA      :&POP        "OVR 00
 	&EQU         $2         $2          "EQU 00
 	&NEQ         $2         $2          "NEQ 00
 	&GTH        :&DIV      :&JSR        "GTH 00

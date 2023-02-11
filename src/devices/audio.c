@@ -2,8 +2,7 @@
 #include "audio.h"
 
 /*
-Copyright (c) 2021 Devine Lu Linvega
-Copyright (c) 2021 Andrew Alderwick
+Copyright (c) 2021-2023 Devine Lu Linvega, Andrew Alderwick
 
 Permission to use, copy, modify, and distribute this software for any
 purpose with or without fee is hereby granted, provided that the above
@@ -16,6 +15,14 @@ WITH REGARD TO THIS SOFTWARE.
 #define NOTE_PERIOD (SAMPLE_FREQUENCY * 0x4000 / 11025)
 #define ADSR_STEP (SAMPLE_FREQUENCY / 0xf)
 
+typedef struct {
+	Uint8 *addr;
+	Uint32 count, advance, period, age, a, d, s, r;
+	Uint16 i, len;
+	Sint8 volume[2];
+	Uint8 pitch, repeat;
+} UxnAudio;
+
 /* clang-format off */
 
 static Uint32 advances[12] = {
@@ -23,7 +30,7 @@ static Uint32 advances[12] = {
 	0xb504f, 0xbfc88, 0xcb2ff, 0xd7450, 0xe411f, 0xf1a1c
 };
 
-UxnAudio uxn_audio[POLYPHONY];
+static UxnAudio uxn_audio[POLYPHONY];
 
 /* clang-format on */
 
@@ -40,8 +47,9 @@ envelope(UxnAudio *c, Uint32 age)
 }
 
 int
-audio_render(UxnAudio *c, Sint16 *sample, Sint16 *end)
+audio_render(int instance, Sint16 *sample, Sint16 *end)
 {
+	UxnAudio *c = &uxn_audio[instance];
 	Sint32 s;
 	if(!c->advance || !c->period) return 0;
 	while(sample < end) {
@@ -59,13 +67,26 @@ audio_render(UxnAudio *c, Sint16 *sample, Sint16 *end)
 		*sample++ += s * c->volume[0] / 0x180;
 		*sample++ += s * c->volume[1] / 0x180;
 	}
-	if(!c->advance) audio_finished_handler(c);
+	if(!c->advance) audio_finished_handler(instance);
 	return 1;
 }
 
 void
-audio_start(UxnAudio *c, Uint16 adsr, Uint8 pitch)
+audio_start(int instance, Uint8 *d, Uxn *u)
 {
+	UxnAudio *c = &uxn_audio[instance];
+	Uint16 addr, adsr;
+	Uint8 pitch;
+	PEKDEV(adsr, 0x8);
+	PEKDEV(c->len, 0xa);
+	PEKDEV(addr, 0xc);
+	if(c->len > 0x10000 - addr)
+		c->len = 0x10000 - addr;
+	c->addr = &u->ram[addr];
+	c->volume[0] = d[0xe] >> 4;
+	c->volume[1] = d[0xe] & 0xf;
+	c->repeat = !(d[0xf] & 0x80);
+	pitch = d[0xf] & 0x7f;
 	if(pitch < 108 && c->len)
 		c->advance = advances[pitch % 12] >> (8 - pitch / 12);
 	else {
@@ -85,8 +106,9 @@ audio_start(UxnAudio *c, Uint16 adsr, Uint8 pitch)
 }
 
 Uint8
-audio_get_vu(UxnAudio *c)
+audio_get_vu(int instance)
 {
+	UxnAudio *c = &uxn_audio[instance];
 	int i;
 	Sint32 sum[2] = {0, 0};
 	if(!c->advance || !c->period) return 0;
@@ -96,4 +118,11 @@ audio_get_vu(UxnAudio *c)
 		if(sum[i] > 0xf) sum[i] = 0xf;
 	}
 	return (sum[0] << 4) | sum[1];
+}
+
+Uint16
+audio_get_position(int instance)
+{
+	UxnAudio *c = &uxn_audio[instance];
+	return c->i;
 }

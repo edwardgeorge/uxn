@@ -4,10 +4,11 @@ packages:
     - build-essential
     - libsdl2-dev
     - rsync
+    - wget
     - zip
 oauth: pages.sr.ht/PAGES:RW
 environment:
-    SITE: rabbits.srht.site
+    SITE: rabbits.srht.site/uxn
     SSH_HOST_KEYS: |
         [w1.uxn-build.ald.nu]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP+IYCB4JrKklFjWSMRkPBTqUjBqUuhlDQy6/X3l8xj5
         [m1.uxn-build.ald.nu]:2223 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDvWVqlHh3XQ5ziEbT55K896/mW2BVDdkU6hWgIfU9md
@@ -18,8 +19,8 @@ sources:
     - https://git.sr.ht/~rabbits/uxn
 tasks:
     - prepare: |
-        rm -f out
-        mkdir -p out
+        rm -f out build
+        mkdir -p out build/uxn-lin64 build/uxn-win64 build/uxn-mac64 build/essentials/uxn
         umask 077
         mkdir -p ~/.ssh
         printf '%s\n' "${SSH_HOST_KEYS}" > ~/.ssh/known_hosts
@@ -27,12 +28,10 @@ tasks:
     - build-linux: |
         cd uxn
         ./build.sh --no-run
-        mv bin uxn
-        tar -czf ../out/uxn-linux-amd64.tar.gz uxn
-        cd ..
-    - build-rompack: |
-        mkdir -p rompack/uxn
-        for F in uxn/projects/software/calc.tal uxn/projects/software/launcher.tal uxn/projects/examples/demos/piano.tal uxn/projects/examples/demos/clock.tal catclock/src/main.tal dexe/src/main.tal donsol/src/main.tal left/src/main.tal nasu/src/main.tal noodle/src/main.tal orca-toy/src/main.tal:orca.rom turye/src/main.tal; do
+        cp bin/asma.rom ../out/
+        mv bin ../build/uxn-lin64/uxn
+    - build-essentials: |
+        for F in uxn/projects/software/calc.tal uxn/projects/software/launcher.tal uxn/projects/examples/demos/piano.tal uxn/projects/examples/software/clock.tal catclock/src/catclock.tal dexe/src/dexe.tal donsol/src/main.tal left/src/left.tal nasu/src/nasu.tal noodle/src/noodle.tal orca-toy/src/orca.tal:orca.rom turye/src/turye.tal; do
             PROJECT="${F%%/*}"
             if [ "${F}" = "${F%:*}" ]; then
                 ROMNAME="${F##*/}"
@@ -43,20 +42,39 @@ tasks:
                 F="${F%:*}"
             fi
             [ -d "${PROJECT}" ] || git clone "https://git.sr.ht/~rabbits/${PROJECT}"
-            ( cd "${PROJECT}" && ../uxn/uxn/uxnasm "${F#*/}" "../rompack/uxn/${ROMNAME}" || rm -f "../rompack/uxn/${ROMNAME}" )
+            ( cd "${PROJECT}" && ../build/uxn-lin64/uxn/uxnasm "${F#*/}" "../build/essentials/uxn/${ROMNAME}" || rm -f "../build/essentials/uxn/${ROMNAME}" )
         done
-        tar -czf out/uxn-rompack.tar.gz -C rompack uxn
-        ( cd rompack && zip -qr ../out/uxn-rompack.zip uxn )
         [ -e ~/.ssh/id_rsa ] || complete-build
     - build-windows: |
-        ssh win "rm -f uxn-windows-64bit.zip; export PATH=\"\${PATH}:/mingw64/bin\"; set -ex; cd uxn; git fetch; git checkout .; git clean -xfd; git checkout $(cd uxn && git rev-parse HEAD); MSYSTEM=MSYS ./build.sh --no-run; mv bin uxn; zip -qr ../uxn-windows-64bit.zip uxn"
-        rsync win:uxn-windows-64bit.zip out/
+        if ssh -o ConnectTimeout=10 win true; then
+            ssh win "export PATH=\"\${PATH}:/mingw64/bin\"; set -ex; cd uxn; git fetch; git checkout .; git clean -xfd; git checkout $(cd uxn && git rev-parse HEAD); MSYSTEM=MSYS ./build.sh --no-run"
+            rsync -rp win:uxn/bin/ build/uxn-win64/uxn/
+        else
+            wget -nv -NP out "https://${SITE}/"uxn{,-essentials}-win64.{tar.gz,zip} || true
+            touch out/needs-solar-build
+        fi
     - build-macos: |
-        ssh mac "rm -f uxn-macos.tar.gz; export PATH=\"\${PATH}:/usr/local/bin\"; set -ex; cd uxn; git fetch; git checkout .; git clean -xfd; git checkout $(cd uxn && git rev-parse HEAD); ./build.sh --no-run; mv bin uxn; tar -zcf ../uxn-macos.tar.gz uxn"
-        rsync mac:uxn-macos.tar.gz out/
+        if ssh -o ConnectTimeout=10 mac true; then
+            ssh mac "export PATH=\"\${PATH}:/usr/local/bin\"; set -ex; cd uxn; git fetch; git checkout .; git clean -xfd; git checkout $(cd uxn && git rev-parse HEAD); ./build.sh --no-run"
+            rsync -rp mac:uxn/bin/ build/uxn-mac64/uxn/
+        else
+            wget -nv -NP out "https://${SITE}/"uxn{,-essentials}-mac64.{tar.gz,zip} || true
+            touch out/needs-solar-build
+        fi
+    - archive: |
+        for PROJECT in uxn-lin64 uxn-win64 uxn-mac64 essentials; do
+            [ -d "build/${PROJECT}/uxn" ] || continue
+            tar -czf "out/${PROJECT}.tar.gz" -C "build/${PROJECT}" uxn
+            ( cd "build/${PROJECT}" && zip -qr "../../out/${PROJECT}.zip" uxn )
+            if [ "${PROJECT}" != essentials ]; then
+                cp build/essentials/uxn/* "build/${PROJECT}/uxn/"
+                tar -czf "out/uxn-essentials-${PROJECT#uxn-}.tar.gz" -C "build/${PROJECT}" uxn
+                ( cd "build/${PROJECT}" && zip -qr "../../out/uxn-essentials-${PROJECT#uxn-}.zip" uxn )
+            fi
+        done
     - upload: |
-        if [ "$(cd uxn && git rev-parse HEAD)" != "$(cd uxn && git rev-parse origin/main)" ]; then exit; fi
         ls -l out
+        if [ "$(cd uxn && git rev-parse HEAD)" != "$(cd uxn && git rev-parse origin/main)" ]; then exit; fi
         tar -czf out.tar.gz -C out .
         acurl() {
             set +x
@@ -66,4 +84,6 @@ tasks:
         acurl -fsS "https://pages.sr.ht/publish/${SITE}" -Fcontent=@out.tar.gz
         acurl -fsS "https://pages.sr.ht/publish/${SITE}" -Fcontent=@out.tar.gz -Fprotocol=GEMINI
     - build-9front: |
-        ssh 9front "$(cd uxn && git rev-parse HEAD)"
+        if ssh -o ConnectTimeout=10 9front true; then
+            ssh 9front "$(cd uxn && git rev-parse HEAD)"
+        fi

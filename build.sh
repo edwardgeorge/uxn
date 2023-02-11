@@ -2,6 +2,7 @@
 
 format=0
 console=0
+install=0
 debug=0
 norun=0
 
@@ -14,6 +15,11 @@ while [ $# -gt 0 ]; do
 
 		--console)
 			console=1
+			shift
+			;;
+
+		--install)
+			install=1
 			shift
 			;;
 
@@ -33,19 +39,13 @@ while [ $# -gt 0 ]; do
 done
 
 echo "Cleaning.."
-rm -f ./bin/uxnasm
-rm -f ./bin/uxnemu
-rm -f ./bin/uxncli
-rm -f ./bin/launcher.rom
-rm -f ./bin/asma.rom
+rm -f ./bin/*
 
 # When clang-format is present
 
 if [ $format = 1 ];
 then
 	echo "Formatting.."
-	clang-format -i src/uxn.h
-	clang-format -i src/uxn.c
 	clang-format -i src/devices/system.h
 	clang-format -i src/devices/system.c
 	clang-format -i src/devices/screen.h
@@ -70,6 +70,7 @@ CC="${CC:-clang}"
 CFLAGS="${CFLAGS:--std=c89 -Wall -Wno-unknown-pragmas}"
 case "$(uname -s 2>/dev/null)" in
 MSYS_NT*|MINGW*) # MSYS2 on Windows
+	FILE_LDFLAGS="-liberty"
 	if [ $console = 1 ];
 	then
 		UXNEMU_LDFLAGS="-static $(sdl2-config --cflags --static-libs | sed -e 's/ -mwindows//g')"
@@ -98,10 +99,10 @@ fi
 
 echo "Building.."
 ${CC} ${CFLAGS} src/uxnasm.c -o bin/uxnasm
-${CC} ${CFLAGS} ${CORE} src/devices/system.c src/devices/file.c src/devices/datetime.c src/devices/mouse.c src/devices/controller.c src/devices/screen.c src/devices/audio.c src/uxnemu.c ${UXNEMU_LDFLAGS} -o bin/uxnemu
-${CC} ${CFLAGS} ${CORE} src/devices/system.c src/devices/file.c src/devices/datetime.c src/uxncli.c -o bin/uxncli
+${CC} ${CFLAGS} ${CORE} src/devices/system.c src/devices/file.c src/devices/datetime.c src/devices/mouse.c src/devices/controller.c src/devices/screen.c src/devices/audio.c src/uxnemu.c ${UXNEMU_LDFLAGS} ${FILE_LDFLAGS} -o bin/uxnemu
+${CC} ${CFLAGS} ${CORE} src/devices/system.c src/devices/file.c src/devices/datetime.c src/uxncli.c ${FILE_LDFLAGS} -o bin/uxncli
 
-if [ -d "$HOME/bin" ]
+if [ $install = 1 ]
 then
 	echo "Installing in $HOME/bin"
 	cp bin/uxnemu bin/uxnasm bin/uxncli $HOME/bin/
@@ -118,11 +119,14 @@ do
 	bin/uxncli bin/asma.rom $f bin/`basename ${f%.tal}`.rom 2> /dev/null
 done
 
+<<<<<<< HEAD
 if [ $norun = 1 ]; then exit; fi
+=======
+echo "Assembling(piano).."
+./bin/uxnasm projects/software/piano.tal bin/piano.rom
+>>>>>>> main
 
 echo "Running.."
-cd bin
-./uxnemu piano.rom
+./bin/uxnemu bin/piano.rom
 
 echo "Done."
-cd ..

@@ -1,43 +1,42 @@
-( FizzBuzz: a program that prints the integers from 1 to 100.
+( FizzBuzz: 
+	A program that prints the integers from 1 to 100.
 	for multiples of three, print "Fizz"
 	for multiples of five, print "Buzz"
 	for multiples of both three and five, print "FizzBuzz" )
 
-%MOD  { DIVk MUL SUB }
-%HALT { #01 #0f DEO }
-%EMIT { #18 DEO }
-%RTN  { JMP2r }
-
-@program
-
-|0100 ( -> )
+|0100 ( -> ) @reset
 
 	#6400
 	&loop
-		LITr 00
-		DUP #03 MOD ,&no3 JCN ;fizz-txt ;print-str JSR2 INCr &no3
-		DUP #05 MOD ,&no5 JCN ;buzz-txt ;print-str JSR2 INCr &no5
-		STHr ,&resume JCN
-		( print decimal )
-		DUPk #0a DIV #30 ADD EMIT
-		#0a MOD #30 ADD EMIT
-		&resume
-		( add linebreak ) #0a EMIT
+		( integer )
+		DUPk ,print-dec JSR #2018 DEO
+		( fizzbuzz )
+		DUP #03 ,mod JSR ,&no3 JCN ;s/fizz ,print-str JSR &no3
+		DUP #05 ,mod JSR ,&no5 JCN ;s/buzz ,print-str JSR &no5
+		#0a18 DEO
 		INC GTHk ,&loop JCN
 	POP2
-
-	HALT
+	( halt )
+	#010f DEO
 
 BRK
 
+@mod ( a b -- c )
+	DIVk MUL SUB
+JMP2r
+
+@print-dec ( num -- )
+	#0a DIV ,&emit JSR
+	#0a ,mod JSR
+	&emit
+	#30 ADD #18 DEO
+JMP2r
+
 @print-str ( addr* -- )
-	
-	&loop
-		LDAk EMIT 
-		INC2 LDAk ,&loop JCN
+	&while
+		LDAk #18 DEO
+		INC2 LDAk ,&while JCN
 	POP2
+JMP2r
 
-RTN
-
-@fizz-txt "Fizz $1
-@buzz-txt "Buzz $1
+@s &fizz "Fizz $1 &buzz "Buzz $1

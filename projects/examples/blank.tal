@@ -1,27 +1,5 @@
 ( a blank file )
 
-%+  { ADD }  %-  { SUB }  %*  { MUL }  %/  { DIV }
-%<  { LTH }  %>  { GTH }  %=  { EQU }  %!  { NEQ }
-%++ { ADD2 } %-- { SUB2 } %** { MUL2 } %// { DIV2 }
-%<< { LTH2 } %>> { GTH2 } %== { EQU2 } %!! { NEQ2 }
-
-%2*  { #10 SFT } %2/  { #01 SFT } %2**  { #10 SFT2 } %2//  { #01 SFT2 }
-%4*  { #20 SFT } %4/  { #02 SFT } %4**  { #20 SFT2 } %4//  { #02 SFT2 }
-%8*  { #30 SFT } %8/  { #03 SFT } %8**  { #30 SFT2 } %8//  { #03 SFT2 }
-%10* { #40 SFT } %10/ { #04 SFT } %10** { #40 SFT2 } %10// { #04 SFT2 }
-%20* { #50 SFT } %20/ { #05 SFT } %20** { #50 SFT2 } %20// { #05 SFT2 }
-
-%2MOD  { #01 AND } %2MOD2  { #0001 AND2 }
-%4MOD  { #03 AND } %4MOD2  { #0003 AND2 }
-%8MOD  { #07 AND } %8MOD2  { #0007 AND2 }
-%10MOD { #0f AND } %10MOD2 { #000f AND2 }
-
-%DEBUG      { ;print-hex/byte JSR2 #0a18 DEO }
-%DEBUG2     { ;print-hex JSR2 #0a18 DEO }
-%RTN        { JMP2r }
-
-( devices )
-
 |00 @System     &vector $2 &wst      $1 &rst    $1 &eaddr  $2 &ecode  $1 &pad     $1 &r       $2 &g      $2 &b     $2 &debug  $1 &halt $1
 |10 @Console    &vector $2 &read     $1 &pad    $5 &write  $1 &error  $1
 |20 @Screen     &vector $2 &width    $2 &height $2 &auto   $1 &pad    $1 &x       $2 &y       $2 &addr   $2 &pixel $1 &sprite $1
@@ -31,8 +9,9 @@
 |60 @Audio3     &vector $2 &position $2 &output $1 &pad    $3 &adsr   $2 &length  $2 &addr    $2 &volume $1 &pitch $1
 |80 @Controller &vector $2 &button   $1 &key    $1 &func   $1
 |90 @Mouse      &vector $2 &x        $2 &y      $2 &state  $1 &pad    $3 &scrollx $2 &scrolly $2
-|a0 @File       &vector $2 &success  $2 &stat   $2 &delete $1 &append $1 &name    $2 &length  $2 &read   $2 &write $2
-|b0 @DateTime   &year   $2 &month    $1 &day    $1 &hour   $1 &minute $1 &second  $1 &dotw    $1 &doty   $2 &isdst $1
+|a0 @File0      &vector $2 &success  $2 &stat   $2 &delete $1 &append $1 &name    $2 &length  $2 &read   $2 &write $2
+|b0 @File1      &vector $2 &success  $2 &stat   $2 &delete $1 &append $1 &name    $2 &length  $2 &read   $2 &write $2
+|c0 @DateTime   &year   $2 &month    $1 &day    $1 &hour   $1 &minute $1 &second  $1 &dotw    $1 &doty   $2 &isdst $1
 
 ( variables )
 
@@ -49,33 +28,19 @@
 
 BRK
 
-@print-hex ( value* -- )
-	
-	SWP ,&byte JSR 
-	&byte ( byte -- )
-		STHk #04 SFT ,&parse JSR #18 DEO
-		STHr #0f AND ,&parse JSR #18 DEO
-	RTN
-	&parse ( byte -- char ) DUP #09 GTH ,&above JCN #30 + RTN 
-	&above #57 + RTN
+@print ( short* -- )
 
-RTN
+	SWP ,&byte JSR
+	&byte ( byte -- ) DUP #04 SFT ,&char JSR
+	&char ( char -- ) #0f AND DUP #09 GTH #27 MUL ADD #30 ADD #18 DEO
 
-@print-dec ( value* -- )
+JMP2r
 
-	#2710 DIV2k DUP #30 ADD #18 DEO MUL2 SUB2
-	#03e8 DIV2k DUP #30 ADD #18 DEO MUL2 SUB2
-	#0064 DIV2k DUP #30 ADD #18 DEO MUL2 SUB2
-	#000a DIV2k DUP #30 ADD #18 DEO MUL2 SUB2
-	#30 ADD #18 DEO POP
+@print-str ( str* -- )
 
-RTN
-
-@print-str ( string* -- )
-
-	#0001 --
 	&while
-		INC2 LDAk DUP #18 DEO ,&while JCN 
+		LDAk #18 DEO
+		INC2 LDAk ,&while JCN
 	POP2
 
-RTN
+JMP2r

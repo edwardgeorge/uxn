@@ -1,92 +1,71 @@
-( brainfuck interpreter )
-
-%!~ { NEQk NIP }
-%DEC { #01 SUB }
-%DEC2 { #0001 SUB2 }
-%DECr { LITr 01 SUBr }
-%RTN { JMP2r }
-%HALT { #0101 #0e DEO2 }
-%EMIT { #18 DEO }
-
-%MEMORY { #8000 }
-
-|0000
-
-@ptr $2
+( Brainfuck:
+	>	Move the pointer to the right
+	<	Move the pointer to the left
+	+	Increment the memory cell at the pointer
+	-	Decrement the memory cell at the pointer
+	.	Output the character signified by the cell at the pointer
+	,	Input a character and store it in the cell at the pointer
+	[	Jump past the matching ] if the cell at the pointer is 0
+	]	Jump back to the matching [ if the cell at the pointer is nonzero )
 
 |0100 ( -> )
 
-	MEMORY .ptr STZ2
-
+	;memory
 	;program
 	&while
-		LDAk ,op JSR
+		LDAk LIT "> NEQ ,&movr JCN [ SWP2 INC2 SWP2 ] &movr
+		LDAk LIT "< NEQ ,&movl JCN [ SWP2 #0001 SUB2 SWP2 ] &movl
+		LDAk LIT "+ NEQ ,&incr JCN [ OVR2 STH2k LDA INC STH2r STA ] &incr
+		LDAk LIT "- NEQ ,&decr JCN [ OVR2 STH2k LDA #01 SUB STH2r STA ] &decr
+		LDAk LIT ". NEQ ,&emit JCN [ OVR2 LDA #18 DEO ] &emit
+		LDAk LIT "[ NEQ ,&next JCN [ ,goto-next JSR ] &next
+		LDAk LIT "] NEQ ,&prev JCN [ ,goto-back JSR ] &prev
 		INC2 LDAk ,&while JCN
 	POP2
+	( halt )
+	#010f DEO
 
-	HALT
-	
 BRK
-
-@op ( op -- )
-
-	( Move the pointer to the right )
-	LIT '> !~ ,&movr JCN [ .ptr LDZ2k INC2 ROT STZ2 POP RTN ] &movr
-	( Move the pointer to the left )
-	LIT '< !~ ,&movl JCN [ .ptr LDZ2k DEC2 ROT STZ2 POP RTN ] &movl
-	( Increment the memory cell at the pointer )
-	LIT '+ !~ ,&incr JCN [ .ptr LDZ2 STH2k LDA INC STH2r STA POP RTN ] &incr
-	( Decrement the memory cell at the pointer )
-	LIT '- !~ ,&decr JCN [ .ptr LDZ2 STH2k LDA DEC STH2r STA POP RTN ] &decr
-	( Output the character signified by the cell at the pointer )
-	LIT '. !~ ,&emit JCN [ .ptr LDZ2 LDA EMIT POP RTN ] &emit
-	( Jump past the matching ] if the cell at the pointer is 0 )
-	LIT '[ !~ ,&next JCN [ POP  ,goto-next JSR RTN ] &next
-	( Jump back to the matching [ if the cell at the pointer is nonzero )
-	LIT '] !~ ,&prev JCN [ POP ,goto-back JSR RTN ] &prev
-	POP
-
-RTN
 
 @goto-next ( -- )
 
-	.ptr LDZ2 LDA #00 EQU JMP RTN
-
+	OVR2 LDA #00 EQU JMP JMP2r
 	( depth ) LITr 00
 	INC2
 	&loop
-		LDAk LIT '[ NEQ JMP INCr
-		LDAk LIT '] NEQ ,&no-end JCN
+		LDAk LIT "[ NEQ JMP INCr
+		LDAk LIT "] NEQ ,&no-end JCN
 			STHkr #00 EQU ,&end JCN
-			DECr
+			LITr 01 SUBr
 			&no-end
 		INC2 LDAk ,&loop JCN
 	&end
 	( depth ) POPr
 
-RTN
+JMP2r
 
 @goto-back ( -- )
 
-	.ptr LDZ2 LDA #00 NEQ JMP RTN
-
+	OVR2 LDA #00 NEQ JMP JMP2r
 	( depth ) LITr 00
-	DEC2
+	#0001 SUB2
 	&loop
-		LDAk LIT '] NEQ JMP INCr
-		LDAk LIT '[ NEQ ,&no-end JCN
+		LDAk LIT "] NEQ JMP INCr
+		LDAk LIT "[ NEQ ,&no-end JCN
 			STHkr #00 EQU ,&end JCN
-			DECr
+			LITr 01 SUBr
 			&no-end
-		DEC2 LDAk ,&loop JCN
+		#0001 SUB2 LDAk ,&loop JCN
 	&end
 	( depth ) POPr
 
-RTN
+JMP2r
 
 @program ( Hello World! )
 
 	"++++++++[>++++[>++>+++>+++>+<<<<
 	"-]>+>+>->>+[<]<-]>>.>---.+++++++
 	"..+++.>>.<-.<.+++.------.-------
-	"-.>>+.>++.
+	"-.>>+.>++. $1
+
+@memory

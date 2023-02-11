@@ -2,12 +2,12 @@
 
 set -e
 
-# need launcher.rom to be included
+# build the thing
 ./build.sh --no-run
-# duplicate? already have a piano
-rm -f bin/asma-piano.rom
+
+# more roms
+./bin/uxncli bin/asma.rom projects/software/piano.tal bin/piano.rom
 
 # get more roms
-curl https://rabbits.srht.site/uxn-rompack.tar.gz | tar -C bin -xzf -
-mv bin/uxn/*.rom bin
-rm -r bin/uxn
+curl -L https://github.com/randrew/uxn32/releases/latest/download/uxn32-essentials.zip | bsdtar -xvf- -C bin
+rm -f bin/*.exe

@@ -119,12 +119,10 @@ do
 	bin/uxncli bin/asma.rom $f bin/`basename ${f%.tal}`.rom 2> /dev/null
 done
 
-<<<<<<< HEAD
 if [ $norun = 1 ]; then exit; fi
-=======
+
 echo "Assembling(piano).."
 ./bin/uxnasm projects/software/piano.tal bin/piano.rom
->>>>>>> main
 
 echo "Running.."
 ./bin/uxnemu bin/piano.rom

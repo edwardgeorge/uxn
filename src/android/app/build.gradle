@@ -1,13 +1,13 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 32
     defaultConfig {
         applicationId "org.rabbits.uxn"
         minSdkVersion 16
-        targetSdkVersion 32
-        versionCode 7
-        versionName "1.5"
+        compileSdkVersion 33
+        targetSdkVersion 33
+        versionCode 8
+        versionName "1.6"
         ndk {
             abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
         }
@@ -32,7 +32,8 @@ android {
             path 'jni/Android.mk'
         }
     }
-    lintOptions {
+    namespace 'org.rabbits.uxn'
+    lint {
         abortOnError false
     }
 }

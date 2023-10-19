@@ -89,6 +89,7 @@ audio_deo(int instance, Uint8 *d, Uint8 port, Uxn *u)
 		SDL_LockAudioDevice(audio_id);
 		audio_start(instance, d, u);
 		SDL_UnlockAudioDevice(audio_id);
+        SDL_PauseAudioDevice(audio_id, 0);
 	}
 }
 
@@ -236,7 +237,7 @@ emu_init(Uxn *u)
 	deadline_interval = ms_interval * TIMEOUT_MS;
 	exec_deadline = SDL_GetPerformanceCounter() + deadline_interval;
 	screen_resize(WIDTH, HEIGHT);
-    SDL_PauseAudioDevice(audio_id, 0);
+    SDL_PauseAudioDevice(audio_id, 1);
 	return 1;
 }
 

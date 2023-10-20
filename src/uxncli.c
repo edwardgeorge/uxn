@@ -45,7 +45,10 @@ emu_run(Uxn *u)
 {
 	while(!u->dev[0x0f]) {
 		int c = fgetc(stdin);
-		if(c == EOF) { console_input(u, 0x00, CONSOLE_END); break; }
+		if(c == EOF) {
+			console_input(u, 0x00, CONSOLE_END);
+			break;
+		}
 		console_input(u, (Uint8)c, CONSOLE_STD);
 	}
 }
@@ -60,7 +63,7 @@ emu_end(Uxn *u)
 int
 main(int argc, char **argv)
 {
-    Uint8 dev[0x100] = {0};
+	Uint8 dev[0x100] = {0};
 	Uxn u;
 	u.dev = (Uint8 *)&dev;
 	int i = 1;

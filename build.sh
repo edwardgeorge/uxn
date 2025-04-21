@@ -72,6 +72,8 @@ Linux|*)
 	;;
 esac
 
+UXNEMU_LDFLAGS="${UXNEMU_LDFLAGS} $(pkg-config --libs --cflags portmidi)"
+
 if [ $debug = 1 ];
 then
 	echo "[debug]"

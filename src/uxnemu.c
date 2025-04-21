@@ -17,6 +17,8 @@
 #include "devices/controller.h"
 #include "devices/mouse.h"
 #include "devices/datetime.h"
+#include <portmidi.h>
+#include <porttime.h>
 #if defined(_WIN32) && defined(_WIN32_WINNT) && _WIN32_WINNT > 0x0602
 #include <processthreadsapi.h>
 #elif defined(_WIN32)
@@ -53,6 +55,8 @@ static SDL_Renderer *emu_renderer;
 static SDL_Rect emu_viewport;
 static SDL_AudioDeviceID audio_id;
 static SDL_Thread *stdin_thread;
+static PmStream *midi_out;
+static PmDeviceID midi_virtual_out = 0;
 
 /* devices */
 
@@ -83,6 +87,14 @@ audio_deo(int instance, Uint8 *d, Uint8 port)
 	}
 }
 
+static Uint8
+midi_dei(Uint8 port)
+{
+	switch(port) {
+	default: return uxn.dev[port];
+	}
+}
+
 Uint8
 emu_dei(Uint8 addr)
 {
@@ -94,9 +106,32 @@ emu_dei(Uint8 addr)
 	case 0x40: return audio_dei(1, &uxn.dev[d], p);
 	case 0x50: return audio_dei(2, &uxn.dev[d], p);
 	case 0x60: return audio_dei(3, &uxn.dev[d], p);
+	case 0x70: return midi_dei(addr);
 	case 0xc0: return datetime_dei(addr);
 	}
 	return uxn.dev[addr];
+}
+
+static void
+midi_deo(Uint8 port)
+{
+	PmError err;
+	switch(port) {
+	case 0x72:
+		if(midi_out != NULL) {
+			err = Pm_WriteShort(
+				midi_out,
+				Pt_Time(),
+				Pm_Message(uxn.dev[0x72], uxn.dev[0x73], uxn.dev[0x74]));
+			if(err != pmNoError) {
+				fprintf(stderr, "Error writing MIDI message: %s\n", Pm_GetErrorText(err));
+			}
+		} else {
+			// TODO: print midi to stdout for shim usage
+		}
+		return;
+	default: break;
+	}
 }
 
 void
@@ -115,6 +150,7 @@ emu_deo(Uint8 addr, Uint8 value)
 	case 0x40: audio_deo(1, &uxn.dev[d], p); break;
 	case 0x50: audio_deo(2, &uxn.dev[d], p); break;
 	case 0x60: audio_deo(3, &uxn.dev[d], p); break;
+	case 0x70: midi_deo(addr); break;
 	case 0x80: controller_deo(addr); break;
 	case 0x90: mouse_deo(addr); break;
 	case 0xa0: file_deo(addr); break;
@@ -254,12 +290,38 @@ emu_init_audio(void)
 	SDL_PauseAudioDevice(audio_id, 1);
 }
 
+static void
+emu_init_midi(void)
+{
+	PmDeviceID vd;
+	PmError err = Pm_Initialize();
+	if(err != pmNoError) {
+		system_error("portmidi", Pm_GetErrorText(err));
+		return;
+	}
+	vd = Pm_CreateVirtualOutput("orca", "CoreMIDI", NULL);
+	if(vd < 0) {
+		system_error("portmidi", Pm_GetErrorText(err));
+		Pm_Terminate();
+		return;
+	}
+	err = Pm_OpenOutput(&midi_out, vd, NULL, 128, NULL, NULL, 0);
+	if(err != pmNoError) {
+		system_error("portmidi", Pm_GetErrorText(err));
+		Pm_DeleteVirtualDevice(vd);
+		Pm_Terminate();
+		return;
+	}
+	midi_virtual_out = vd;
+}
+
 static int
 emu_init(void)
 {
 	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0)
 		return system_error("sdl", SDL_GetError());
 	emu_init_audio();
+	emu_init_midi();
 	if(SDL_NumJoysticks() > 0 && SDL_JoystickOpen(0) == NULL)
 		system_error("sdl_joystick", SDL_GetError());
 	stdin_event = SDL_RegisterEvents(1);
@@ -495,6 +557,13 @@ main(int argc, char **argv)
 #elif !defined(__APPLE__)
 	close(0); /* make stdin thread exit */
 #endif
+	if(midi_out != NULL) {
+		Pm_Close(midi_out);
+	}
+	if(midi_virtual_out != 0) {
+		Pm_DeleteVirtualDevice(midi_virtual_out);
+	}
+	Pm_Terminate();
 	SDL_Quit();
 	return uxn.dev[0x0f] & 0x7f;
 }
